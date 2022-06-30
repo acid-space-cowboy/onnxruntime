@@ -4,6 +4,7 @@
 #pragma once
 
 #include "hip/hip_runtime.h"
+#include "hip_utils.h"
 
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
@@ -18,15 +19,15 @@ class DeviceArray {
     py::buffer_info buf = x.request();
     size_ = buf.size;
     itemsize_ = buf.itemsize;
-    HIP_ASSERT(hipMalloc(&x_device_, size_ * itemsize_));
+    HIP_CHECKED_CALL(hipMalloc(&x_device_, size_ * itemsize_));
     x_host_ = x.request().ptr;
-    HIP_ASSERT(hipMemcpy(x_device_, x_host_, size_ * itemsize_, hipMemcpyHostToDevice));
+    HIP_CHECKED_CALL(hipMemcpy(x_device_, x_host_, size_ * itemsize_, hipMemcpyHostToDevice));
   }
   DeviceArray(const DeviceArray&) = delete;
   DeviceArray& operator=(DeviceArray&) = delete;
 
   void UpdateHostNumpyArray() {
-    HIP_ASSERT(hipMemcpy(x_host_, x_device_, size_ * itemsize_, hipMemcpyDeviceToHost));
+    HIP_CHECKED_CALL(hipMemcpy(x_host_, x_device_, size_ * itemsize_, hipMemcpyDeviceToHost));
   }
 
   void* ptr() const {
@@ -34,7 +35,7 @@ class DeviceArray {
   }
 
   ~DeviceArray() {
-    HIP_ASSERT(hipFree(x_device_));
+    HIP_CHECKED_CALL(hipFree(x_device_));
   }
 
  private:
