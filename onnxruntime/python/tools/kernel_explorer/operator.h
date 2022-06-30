@@ -5,7 +5,6 @@
 
 #include "timer.h"
 
-template <typename T>
 class Operator {
  public:
   Operator() : repeats_(100) {}

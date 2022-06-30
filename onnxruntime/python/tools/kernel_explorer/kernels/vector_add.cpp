@@ -8,14 +8,14 @@
 namespace py = pybind11;
 
 template <typename T, int ThreadsPerBlock, int VecSize>
-class VectorAdd: public Operator<T> {
+class VectorAdd: public Operator {
  public:
   VectorAdd(DeviceArray& x, DeviceArray& y, DeviceArray& z, int n) :
     x_(reinterpret_cast<T*>(x.ptr())),
     y_(reinterpret_cast<T*>(y.ptr())),
     z_(reinterpret_cast<T*>(z.ptr())),
     n_(n),
-    Operator<T>() {}
+    Operator() {}
 
   void Run() {
     LaunchVectorAdd<T, ThreadsPerBlock, VecSize>(x_, y_, z_, n_);
