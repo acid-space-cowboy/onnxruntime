@@ -4,29 +4,29 @@
 project(kernel_explorer)
 cmake_minimum_required(VERSION 3.21)
 
-include(../../../../cmake/external/pybind11.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/external/pybind11.cmake)
 
-# Memory error with Release build (-o3 -DNDEBUG), AMD is currently investigating
-set(CMAKE_BUILD_TYPE Debug)
-set(CMAKE_CXX_COMPILER /opt/rocm/bin/hipcc)
+set(CMAKE_CXX_COMPILER ${onnxruntime_ROCM_HOME}/bin/hipcc)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpic")
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 list(APPEND CMAKE_PREFIX_PATH ${onnxruntime_ROCM_HOME} ${onnxruntime_ROCM_HOME}/hip)
+list(APPEND CMAKE_MODULE_PATH ${onnxruntime_ROCM_HOME}/hip/cmake)
+find_package(HIP REQUIRED)
+find_package(rocblas REQUIRED)
+find_package(Python COMPONENTS Development REQUIRED)
 
-find_package(hip)
-find_package(PythonLibs 3.8 EXACT REQUIRED)
-
-include_directories(${PYTHON_INCLUDE_DIRS})
+include_directories(${Python_INCLUDE_DIRS})
 include_directories(${pybind11_INCLUDE_DIRS})
 include_directories(.)
 
-FILE(GLOB kernel_srcs kernels/*.cpp)
-add_library(kernel_explorer SHARED kernel_explorer.cpp timer.cpp ${kernel_srcs})
-target_link_libraries(kernel_explorer ${PYTHON_LIBRARIES})
+file(GLOB kernel_srcs kernels/*.cpp CONFIG)
+add_library(kernel_explorer SHARED kernel_explorer.cpp timer.cpp hip_utils.cpp ${kernel_srcs})
 set_target_properties(kernel_explorer PROPERTIES PREFIX "")
+target_link_libraries(kernel_explorer PRIVATE ${PYTHON_LIBRARIES} roc::rocblas)
+target_compile_definitions(kernel_explorer PUBLIC ROCM_USE_FLOAT16)
 
 enable_testing()
 find_package(Python COMPONENTS Interpreter REQUIRED)
