@@ -29,16 +29,14 @@ KernelCreateInfo BuildKernelCreateInfo<void>() {
       ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, Start, Op)>
 
 class ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 11, Conv);
-// class ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 10, QLinearConv);
 class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 10, uint8_t, QLinearConv);
 
 class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 11, 11, MaxPool);
 class ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 12, MaxPool);
 class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 7, 7, AveragePool);
 class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSDomain, 1, uint8_t, QLinearAveragePool);
-class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 1, 11, Softmax);
-class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSDomain, 1, 11, QLinearSoftmax);
-class ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 12, Softmax);
+class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 1, 13, Softmax);
+class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSDomain, 1, 13, QLinearSoftmax);
 
 std::unique_ptr<KernelRegistry> RegisterKernels() {
   auto kernel_registry = std::make_unique<onnxruntime::KernelRegistry>();
@@ -46,20 +44,17 @@ std::unique_ptr<KernelRegistry> RegisterKernels() {
   static const BuildKernelCreateInfoFn function_table[] = {
       BuildKernelCreateInfo<void>,  // default entry to avoid the list becoming empty after ops-reducing
       KERNEL_CREATE_INFO(11, Conv),
-      // KERNEL_CREATE_INFO(10, QLinearConv),
-      BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 10, uint8_t, QLinearConv)>,
-
+      BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider,
+                                                                  kMSInternalNHWCDomain, 10, uint8_t, QLinearConv)>,
       KERNEL_CREATE_INFO_VERSIONED(11, 11, MaxPool),
       KERNEL_CREATE_INFO(12, MaxPool),
       KERNEL_CREATE_INFO_VERSIONED(7, 7, AveragePool),
       BuildKernelCreateInfo<
           ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSDomain, 1, uint8_t, QLinearAveragePool)>,
       BuildKernelCreateInfo<
-          ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 1, 11, Softmax)>,
+          ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 1, 13, Softmax)>,
       BuildKernelCreateInfo<
-          ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 12, Softmax)>,
-      BuildKernelCreateInfo<
-          ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSDomain, 1, 11, QLinearSoftmax)>,
+          ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSDomain, 1, 13, QLinearSoftmax)>,
 
   };
 
@@ -141,21 +136,20 @@ std::vector<std::unique_ptr<ComputeCapability>> XnnpackExecutionProvider::GetCap
     if (n == nullptr) {
       continue;
     }
-    const NodeUnit& unit_node = *node_unit_map[n];
-    // if node is part of a QDQ group. we will mark it compatiable in the first call as long as we support the target node.
+    const NodeUnit& node_unit = *node_unit_map[n];
+    // if node is part of a QDQ group, we will mark it compatible in the first call as long as we support the target node.
     const Node& node = *n;
     bool request_node = false;
-    // any node in nodeunit will trigger IsNodeSupported, so we just check once.
-    if (node_unit_supported_result.count(&unit_node)) {
+    // any node in NodeUnit will trigger IsNodeSupported, so we just check once.
+    if (node_unit_supported_result.count(&node_unit)) {
       continue;
-    }
-    else if (node.GetExecutionProviderType() == "") {
+    } else if (node.GetExecutionProviderType() == "") {
       // unassigned node.
       // check if this is an ONNX operator that we have an NHWC xnnpack kernel for.
-      if (checker.IsNodeSupported(unit_node)) {
+      if (checker.IsNodeSupported(node_unit)) {
         request_node = true;
-        //we need to support quantizedOp fusion
-      } else if (unit_node.UnitType() != NodeUnit::Type::QDQGroup) {
+        // we need to support quantizedOp fusion
+      } else if (node_unit.UnitType() != NodeUnit::Type::QDQGroup) {
         // see if it's an activation we can fuse with a node we support. note that we can only do this after
         // the layout transform as we need to fuse with the NWHC op that we have the real kernel for.
         const Node* fuse_with = checker.IsNodeSupportedWithFusion(node);
@@ -183,38 +177,34 @@ std::vector<std::unique_ptr<ComputeCapability>> XnnpackExecutionProvider::GetCap
       // as we requested the node in the first call, it should be supported in the second call.
       request_node = true;
       // we will create a quantized Op to replace QDQGroup in the second call, then we can fuse it with activation after
-      if (unit_node.UnitType() == NodeUnit::Type::QDQGroup) {
+      if (node_unit.UnitType() == NodeUnit::Type::QDQGroup) {
         // create a ComputeCapability for the QDQGroup node.
         std::unique_ptr<IndexedSubGraph> sub_graph = std::make_unique<IndexedSubGraph>();
-        for (const auto& node_i : unit_node.GetInputNodes()) {
+        for (const auto& node_i : node_unit.GetDQNodes()) {
           sub_graph->nodes.push_back(node_i->Index());
         }
-        sub_graph->nodes.push_back(unit_node.Index());
-        for (const auto& node_o : unit_node.GetOutputNodes()) {
+        sub_graph->nodes.push_back(node_unit.Index());
+        for (const auto& node_o : node_unit.GetQNodes()) {
           sub_graph->nodes.push_back(node_o->Index());
         }
-        sub_graph->SetMetaDef(std::move(FuseQDQGroup(unit_node)));
+        sub_graph->SetMetaDef(std::move(FuseQDQGroup(node_unit)));
         sub_graph->use_existing_schema = true;
         capabilities.push_back(std::make_unique<ComputeCapability>(std::move(sub_graph)));
-        node_to_compute_capability.insert({&unit_node.GetNode(), capabilities.back().get()});
-        /*
-        for (const auto& node_i : unit_node.GetInputNodes()) {
-          node_to_compute_capability.insert({node_i, capabilities.back().get()});
-        }
-        for (const auto& node_o : unit_node.GetOutputNodes()) {
-          node_to_compute_capability.insert({node_o, capabilities.back().get()});
-        }*/
-        supported_nodes.insert(&unit_node.GetNode());
-        node_unit_supported_result[&unit_node] = request_node;
+        node_to_compute_capability.insert({&node_unit.GetNode(), capabilities.back().get()});
+
+        supported_nodes.insert(&node_unit.GetNode());
+        node_unit_supported_result[&node_unit] = request_node;
         continue;
       }
     } else {
       // node belongs to another EP
       continue;
     }
-    node_unit_supported_result[&unit_node] = request_node;
+    node_unit_supported_result[&node_unit] = request_node;
     if (request_node) {
-      auto createSingleNode = [&](const Node& inode) {
+      // for a QDQgroup, we will request its DQ/target/Q nodes.
+      // for SingleNode single node, its DQ/Q will be empty
+      auto request_single_node = [&](const Node& inode) {
         // create a ComputeCapability for the individual node.
         std::unique_ptr<IndexedSubGraph> sub_graph = std::make_unique<IndexedSubGraph>();
         sub_graph->nodes.push_back(inode.Index());
@@ -223,14 +213,14 @@ std::vector<std::unique_ptr<ComputeCapability>> XnnpackExecutionProvider::GetCap
         node_to_compute_capability.insert({&node, capabilities.back().get()});
         supported_nodes.insert(&node);
       };
-      //if unit_node is not a qdqgroup, GetInputNodes and GetOutputNodes will be empty
-      for (auto inode : unit_node.GetInputNodes()) {
-        createSingleNode(*inode);
+      // T. we assume all the inputs are either DQnodes or constant initializer.
+      for (auto dq_node : node_unit.GetDQNodes()) {
+        request_single_node(*dq_node);
       }
-      createSingleNode(unit_node.GetNode());
-      for (auto onode : unit_node.GetOutputNodes()) {
-        if (onode->Index() != unit_node.Index()) {
-          createSingleNode(*onode);
+      request_single_node(node_unit.GetNode());
+      for (auto q_node : node_unit.GetQNodes()) {
+        if (q_node->Index() != node_unit.Index()) {
+          request_single_node(*q_node);
         }
       }
     }

@@ -2,8 +2,7 @@
 // Licensed under the MIT License.
 
 #include "node_support_checker.h"
-#include "op_checker_impl.h"
-#include "core/providers/shared/node_unit/node_unit.h"
+
 #include <unordered_map>
 
 #include "core/common/common.h"
@@ -13,17 +12,20 @@
 #include "core/providers/common.h"
 #include "core/providers/cpu/nn/pool_attributes.h"
 #include "core/providers/xnnpack/detail/utils.h"
+#include "core/providers/shared/node_unit/node_unit.h"
 
 // each operator provides a helper to check if supported
 #include "core/providers/xnnpack/nn/conv.h"
 #include "core/providers/xnnpack/nn/max_pool.h"
+#include "core/providers/xnnpack/nn/average_pool.h"
+#include "core/providers/xnnpack/nn/softmax.h"
 
 namespace onnxruntime {
 namespace xnnpack {
 
 namespace {
 // function to check if a node is supported. kernel must have been matched previously to check type constraints.
-using CheckerFn = std::function<bool(const onnxruntime::NodeUnit& node,
+using CheckerFn = std::function<bool(const NodeUnit& node,
                                      const GraphViewer& graph)>;
 
 // function to check if we can fuse a node with a previously selected one.
@@ -83,11 +85,11 @@ const Node* ClipReluChecker(const Node& node,
 bool NodeSupportChecker::IsNodeSupported(const NodeUnit& nodeunit) {
   auto& node = nodeunit.GetNode();
   static std::unordered_map<std::string, CheckerFn> checkers{
-      {"Conv", IsConvOnnxNodeSupported},
-      {"QLinearConv", IsConvOnnxNodeSupported},
-      {"MaxPool", IsMaxPoolOnnxNodeSupported},
-      {"AveragePool", IsAveragePoolOnnxNodeSupported},
-      {"Softmax", IsSoftmaxOnnxNodeSupported},
+      {"Conv", Conv::IsConvOnnxNodeSupported},
+      {"QLinearConv", Conv::IsConvOnnxNodeSupported},
+      {"MaxPool", MaxPool::IsMaxPoolOnnxNodeSupported},
+      {"AveragePool", AveragePool::IsAveragePoolOnnxNodeSupported},
+      {"Softmax", Softmax::IsSoftmaxOnnxNodeSupported},
   };
 
   bool supported = false;
@@ -109,7 +111,7 @@ const Node* NodeSupportChecker::IsNodeSupportedWithFusion(const Node& node) {
   };
 
   const Node* fuse_with{nullptr};
-  //it should be fine to check only the target node.
+  // it should be fine to check the target node only.
   if (node.Domain() == onnxruntime::kOnnxDomain) {
     const auto entry = checkers.find(node.OpType());
     if (entry != checkers.cend()) {

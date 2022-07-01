@@ -8,6 +8,7 @@
 #include "core/framework/op_kernel.h"
 #include "core/graph/indexed_sub_graph.h"
 #include "core/providers/common.h"
+#include "core/providers/shared/node_unit/node_unit.h"
 
 #include "xnnpack.h"
 
@@ -16,21 +17,25 @@ class GraphViewer;
 class NodeUnit;
 namespace xnnpack {
 
-// from xnnpack subgraph.h
-enum xnn_compute_type {
-  xnn_compute_type_invalid = 0,
-  xnn_compute_type_fp32,
-  xnn_compute_type_fp16,
-  xnn_compute_type_qc8,
-  xnn_compute_type_qs8,
-  xnn_compute_type_qu8,
-  /*
-  xnn_compute_type_fp32_to_fp16,
-  xnn_compute_type_fp32_to_qs8,
-  xnn_compute_type_fp32_to_qu8,
-  xnn_compute_type_fp16_to_fp32,
-  xnn_compute_type_qs8_to_fp32,
-  xnn_compute_type_qu8_to_fp32,*/
+enum OpComputeType : uint8_t {
+  op_compute_type_invalid = 0,
+  op_compute_type_fp32,
+  op_compute_type_fp16,
+  op_compute_type_qs8_per_channel,
+  op_compute_type_qs8,
+  op_compute_type_qu8,
+};
+
+struct InputTensorOrder {
+  int IN_X = -1;
+  int IN_X_SCALE = -1;
+  int IN_X_ZERO_POINT = -1;
+  int IN_W = -1;
+  int IN_W_SCALE = -1;
+  int IN_W_ZERO_POINT = -1;
+  int IN_Y_SCALE = -1;
+  int IN_Y_ZERO_POINT = -1;
+  int IN_BIAS = -1;
 };
 
 struct QuantParam {
@@ -40,7 +45,7 @@ struct QuantParam {
 
   float X_scale_value = 0;
   float W_scale_value = 0;
-  const float *W_scale_arr = 0;
+  const Tensor* W_scale_tensor = nullptr;
   float Y_scale_value = 0;
 };
 
@@ -82,6 +87,19 @@ std::unique_ptr<IndexedSubGraph::MetaDef> FuseQDQGroup(const NodeUnit& unit_node
 
 bool GetType(const NodeArg& node_arg, int32_t& type);
 bool GetShape(const NodeArg& node_arg, Shape& shape);
-bool ParseQuantParamFromInfoByOrder(const OpKernelInfo& info, std::vector<int32_t> scale_zp_indexs, QuantParam& quant_param_, int32_t zptype);
+bool ParseQuantParamFromInfoByOrder(const OpKernelInfo& info,
+                                    const InputTensorOrder& scale_zp_indexs,
+                                    QuantParam& quant_param_);
+
+bool IsQuantizedConv(QuantizedOpType quant_op_type);
+
+bool IsQuantizedMaxPool(QuantizedOpType quant_op_type);
+
+bool IsQuantizedAvgPool(QuantizedOpType quant_op_type);
+
+bool IsQuantizedSoftmax(QuantizedOpType quant_op_type);
+xnn_datatype GetDtypeInXnnpack(const onnxruntime::NodeUnit& node_unit, int32_t io_index,
+                               bool is_output, const onnxruntime::GraphViewer& graph_viewer);
+
 }  // namespace xnnpack
 }  // namespace onnxruntime

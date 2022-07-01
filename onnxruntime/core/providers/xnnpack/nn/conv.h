@@ -16,23 +16,6 @@ namespace xnnpack {
 
 class Conv : public OpKernel {
  public:
-  enum InputTensors : int {
-    IN_X = 0,
-    IN_X_SCALE = 1,
-    IN_X_ZERO_POINT = 2,
-    IN_W = 3,
-    IN_W_SCALE = 4,
-    IN_W_ZERO_POINT = 5,
-    IN_Y_SCALE = 6,
-    IN_Y_ZERO_POINT = 7,
-    IN_BIAS = 8
-  };
-
-  enum OutputTensors : int {
-    OUT_Y = 0
-  };
-
- public:
   Conv(const OpKernelInfo& info);
 
   Status Compute(OpKernelContext* /*context*/) const override;
@@ -41,6 +24,10 @@ class Conv : public OpKernel {
   Status PrePack(const Tensor& tensor, int input_idx, AllocatorPtr alloc,
                  /*out*/ bool& is_packed,
                  /*out*/ PrePackedWeights* prepacked_weights) override;
+  // check to see if an ONNX NCHW Conv node is supported by this implementation. the first input and output will be
+  // converted to NHWC by ORT.
+  static bool IsConvOnnxNodeSupported(const NodeUnit& nchw_nodeunit, const GraphViewer& graph);
+
  private:
   // due to other constraints of this kernel the value of group is either 1 or C, so we can infer that if it's not 1
   // it's a depthwise convolution
@@ -55,13 +42,13 @@ class Conv : public OpKernel {
   std::optional<std::pair<float, float>> clip_min_max_;
 
   XnnpackOperator op0_ = nullptr;
-  //when xnnpack version has been updated, we can remove the macro
+  // when xnnpack version has been updated, we can remove the macro
 #ifdef XNN_CACHE_ENABLE
   xnn_code_cache code_cache_;
-  xnn_caches caches_;
+  xnn_caches xnn_caches_;
 #endif
   QuantParam quant_param_;
-  xnn_compute_type conv_type_ = xnn_compute_type_invalid;
+  OpComputeType conv_type_ = OpComputeType::op_compute_type_invalid;
 };
 
 }  // namespace xnnpack

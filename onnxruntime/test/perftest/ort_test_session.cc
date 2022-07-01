@@ -6,6 +6,7 @@
 #include <assert.h>
 #include "providers.h"
 #include "TestCase.h"
+//#include "test/common/tensor_op_test_utils.h"
 
 #ifdef _WIN32
 #define strdup _strdup
@@ -546,10 +547,14 @@ select from 'TF8', 'TF16', 'UINT8', 'FLOAT', 'ITENSOR'. \n)");
   }
 }
 
-// seed=-1 means no initilize
-void OnnxRuntimeTestSession::initilize_tensor_with_seed(int32_t seed, ONNXTensorElementDataType type,
-                                                        void* data_ptr, const std::vector<int64_t>& input_node_dim) {
+// seed=-1 means we keep the random values in memory
+// in some case, we want to check the results for multi-runs, with the given we can recap the input data
+// another reason is that, the input would be always 255/-127 for uint8_t or int8_t types of input.
+// which will produce all zero outputs.
+void OnnxRuntimeTestSession::InitializeTensorWithSeed(int32_t seed, ONNXTensorElementDataType type,
+                                                      void* data_ptr, const std::vector<int64_t>& input_node_dim) {
   if (seed < 0) return;
+  // test::RandomValueGenerator random{seed};
   std::default_random_engine engin;
   engin.seed(seed);
   int64_t total_elem = 1;
@@ -558,9 +563,11 @@ void OnnxRuntimeTestSession::initilize_tensor_with_seed(int32_t seed, ONNXTensor
   }
   switch (type) {
     case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT: {
+      // std::vector<float> inputs = random.Uniform<float>(input_node_dim, -5, 5);
       const std::uniform_real_distribution<float>::param_type p(0, static_cast<float>(5));
       std::uniform_real_distribution<float> dist;
       auto* ptr = reinterpret_cast<float*>(data_ptr);
+      // std::memcpy(ptr, inputs.data(), inputs.size()*sizeof(float));
       for (int i = 0; i < total_elem; ++i) {
         ptr[i] = dist(engin, p);
       }
@@ -584,13 +591,14 @@ void OnnxRuntimeTestSession::initilize_tensor_with_seed(int32_t seed, ONNXTensor
       }
       break;
     }
+    // actually, it's hard to initialize Bert for the semantic input value
     default:
-      //"not implemented yet, we won't initialize it";
+      //"not implemented yet, do nothing";
       break;
   }
 }
 
-bool OnnxRuntimeTestSession::PopulateGeneratedInputTestData() {
+bool OnnxRuntimeTestSession::PopulateGeneratedInputTestData(int32_t seed) {
   // iterate over all input nodes
   for (size_t i = 0; i < static_cast<size_t>(input_length_); i++) {
     Ort::TypeInfo type_info = session_.GetInputTypeInfo(i);
@@ -609,7 +617,7 @@ bool OnnxRuntimeTestSession::PopulateGeneratedInputTestData() {
       auto allocator = static_cast<OrtAllocator*>(Ort::AllocatorWithDefaultOptions());
       Ort::Value input_tensor = Ort::Value::CreateTensor(allocator, (const int64_t*)input_node_dim.data(),
                                                          input_node_dim.size(), tensor_info.GetElementType());
-      initilize_tensor_with_seed(0, tensor_info.GetElementType(), input_tensor.GetTensorMutableData<uint8_t>(), input_node_dim);
+      InitializeTensorWithSeed(seed, tensor_info.GetElementType(), input_tensor.GetTensorMutableData<uint8_t>(), input_node_dim);
       PreLoadTestData(0, i, std::move(input_tensor));
     }
   }
