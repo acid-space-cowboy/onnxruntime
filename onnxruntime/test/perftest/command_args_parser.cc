@@ -217,7 +217,8 @@ static bool ParseDimensionOverride(std::basic_string<ORTCHAR_T>& dim_identifier,
         test_config.run_config.f_dump_statistics = true;
         break;
       case 'S':
-        test_config.run_config.random_seed_for_input_data = static_cast<int32_t>(OrtStrtol<PATH_CHAR_TYPE>(optarg, nullptr));
+        test_config.run_config.random_seed_for_input_data = static_cast<int32_t>(
+            OrtStrtol<PATH_CHAR_TYPE>(optarg, nullptr));
         break;
       case 'v':
         test_config.run_config.f_verbose = true;

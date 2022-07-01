@@ -113,7 +113,7 @@ std::unique_ptr<IndexedSubGraph::MetaDef> FuseQDQGroup(const NodeUnit& unit_node
     // registration
     def.domain = kMSDomain;  // should always be kMSDomain
     def.since_version = 1;   // onnx schema version
-    //x xsc xzp ysc yzp
+    // x xsc xzp ysc yzp
     def.inputs.reserve(5);
     // x x-scale x-zp
     std::for_each(inputs.cbegin(), inputs.cend(),
@@ -128,8 +128,8 @@ std::unique_ptr<IndexedSubGraph::MetaDef> FuseQDQGroup(const NodeUnit& unit_node
     const auto& y_quant_param = unit_node.Outputs()[0].quant_param.value();
     def.inputs.push_back(y_quant_param.scale.Name());
     def.inputs.push_back(y_quant_param.zero_point ? y_quant_param.zero_point->Name() : "");
-    //we used the nhwc schema here, and avgpool is layout sensitive
-    if (qtype == QuantizedOpType::QDQAvgPool){
+    // we used the nhwc schema here, and avgpool is layout sensitive
+    if (qtype == QuantizedOpType::QDQAvgPool) {
       def.attributes["channels_last"] = utils::MakeAttribute(std::string("channels_last"), int64_t(1));
     }
   } else {
@@ -142,7 +142,7 @@ std::unique_ptr<IndexedSubGraph::MetaDef> FuseQDQGroup(const NodeUnit& unit_node
 
   // attributes
   // copy existing and add the activation info
-  def.attributes.insert(unit_node.GetNode().GetAttributes().begin(),unit_node.GetNode().GetAttributes().end());
+  def.attributes.insert(unit_node.GetNode().GetAttributes().begin(), unit_node.GetNode().GetAttributes().end());
   return metadef;
 }
 
@@ -311,7 +311,9 @@ xnn_datatype GetDtypeInXnnpack(const onnxruntime::NodeUnit& node_unit, int32_t i
       datatype = xnn_datatype_quint8;
       break;
     case ONNX_NAMESPACE::TensorProto_DataType_INT8:
-      if (!iodef.quant_param.has_value() || scale_tensor == nullptr || scale_tensor->data_type() != ONNX_NAMESPACE::TensorProto_DataType_INT8 || zero_tensor == nullptr || zero_tensor->data_type() != ONNX_NAMESPACE::TensorProto_DataType_INT8) {
+      if (!iodef.quant_param.has_value() || scale_tensor == nullptr ||
+          scale_tensor->data_type() != ONNX_NAMESPACE::TensorProto_DataType_INT8 ||
+          zero_tensor == nullptr || zero_tensor->data_type() != ONNX_NAMESPACE::TensorProto_DataType_INT8) {
         break;
       }
 

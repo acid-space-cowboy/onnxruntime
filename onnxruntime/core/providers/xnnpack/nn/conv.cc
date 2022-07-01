@@ -9,7 +9,7 @@
 #include "core/providers/utils.h"
 #include "core/providers/xnnpack/detail/utils.h"
 #include "core/framework/tensorprotoutils.h"
-//#define XNN_CACHE_ENABLE
+
 namespace onnxruntime {
 namespace xnnpack {
 
@@ -25,7 +25,6 @@ Status CreateXnnpackKernel(const ConvAttributes& conv_attrs,
 #endif
                            QuantParam* quant_param,
                            OpComputeType conv_type) {
-
   uint32_t kernel_height = gsl::narrow<uint32_t>(kernel_shape[0]);
   uint32_t kernel_width = gsl::narrow<uint32_t>(kernel_shape[1]);
 
@@ -510,7 +509,7 @@ Status Conv::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr alloc,
     auto ret = CreateXnnpackKernel(conv_attrs_, C_, M_, kernel_shape_, clip_min_max_, *packed_w_,
                                    B_, p,
 #ifdef XNN_CACHE_ENABLE
-                                   0,//&xnn_caches_,
+                                   0,  //&xnn_caches_,
 #endif
                                    &quant_param_, conv_type_);
     ORT_RETURN_IF_ERROR(ret);

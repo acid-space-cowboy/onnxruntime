@@ -13,7 +13,8 @@
 
 namespace onnxruntime {
 namespace xnnpack {
-bool MaxPool::IsMaxPoolOnnxNodeSupported(const onnxruntime::NodeUnit& nodeunit, const onnxruntime::GraphViewer& /*graph*/) {
+bool MaxPool::IsMaxPoolOnnxNodeSupported(const onnxruntime::NodeUnit& nodeunit,
+                                         const onnxruntime::GraphViewer& /*graph*/) {
   bool supported = false;
   const onnxruntime::Node& node = nodeunit.GetNode();
   // use do {} while(false) so it's easier to set a breakpoint on the return

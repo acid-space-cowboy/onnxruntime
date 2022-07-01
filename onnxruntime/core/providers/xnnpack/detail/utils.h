@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 
 #include "core/framework/op_kernel.h"
 #include "core/graph/indexed_sub_graph.h"

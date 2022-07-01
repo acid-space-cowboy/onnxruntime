@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
+#include <string>
 
-#include "average_pool.h"
+#include "core/providers/xnnpack/nn/average_pool.h"
 
 #include "core/common/status.h"
 #include "core/providers/xnnpack/detail/utils.h"
@@ -9,7 +10,8 @@
 #include "core/providers/utils.h"
 #include "core/framework/tensorprotoutils.h"
 
-#include "xnnpack.h"
+#include <xnnpack.h>
+
 namespace onnxruntime {
 namespace xnnpack {
 namespace {
@@ -86,7 +88,9 @@ static bool IsQuantAvgPoolSupported(const NodeUnit& node_unit, const GraphViewer
   return supported;
 }
 }  // namespace
-bool AveragePool::IsAveragePoolOnnxNodeSupported(const onnxruntime::NodeUnit& nodeunit, const onnxruntime::GraphViewer& graph) {
+
+bool AveragePool::IsAveragePoolOnnxNodeSupported(const onnxruntime::NodeUnit& nodeunit,
+                                                 const onnxruntime::GraphViewer& graph) {
   bool supported = false;
 
   if (IsQuantizedAvgPool(GetQuantizedOpType(nodeunit)) && IsQuantAvgPoolSupported(nodeunit, graph) == false) {

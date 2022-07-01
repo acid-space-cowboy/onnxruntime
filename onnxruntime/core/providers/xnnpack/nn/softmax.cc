@@ -102,6 +102,10 @@ Softmax::Softmax(const OpKernelInfo& info) : OpKernel{info} {
   xnn_status xstatus;
   struct xnn_operator* p;
   if (op_type_ == OpComputeType::op_compute_type_qu8) {
+    InputTensorOrder tensor_index = {-1, 1, 2, -1, -1, -1, 3, 4, -1};
+    ParseQuantParamFromInfoByOrder(info, tensor_index, quant_param_);
+
+    /*
     const Tensor* X_zero_point = nullptr;
     const Tensor* Y_zero_point = nullptr;
     const Tensor* X_scale = nullptr;
@@ -111,17 +115,18 @@ Softmax::Softmax(const OpKernelInfo& info) : OpKernel{info} {
     info.TryGetConstantInput(InputTensors::IN_Y_SCALE, &Y_scale);
     info.TryGetConstantInput(InputTensors::IN_Y_ZERO_POINT, &Y_zero_point);
 
+    quant_param_.X_zero_point_value = *(X_zero_point->template Data<uint8_t>());
+    quant_param_.X_scale_value = *(X_scale->template Data<float>());
+    quant_param_.Y_zero_point_value = *(Y_zero_point->template Data<uint8_t>());
+    quant_param_.Y_scale_value = *(Y_scale->template Data<float>());
+    */
+
     /*
     IsScalarOr1ElementVector(X_scale);
     X_zero_point == nullptr || IsScalarOr1ElementVector(X_zero_point);
     IsScalarOr1ElementVector(Y_scale);
     Y_zero_point == nullptr || IsScalarOr1ElementVector(Y_zero_point);
     */
-
-    quant_param_.X_zero_point_value = *(X_zero_point->template Data<uint8_t>());
-    quant_param_.X_scale_value = *(X_scale->template Data<float>());
-    quant_param_.Y_zero_point_value = *(Y_zero_point->template Data<uint8_t>());
-    quant_param_.Y_scale_value = *(Y_scale->template Data<float>());
     xstatus = xnn_create_softmax_nc_qu8(
         channels,
         channels,
@@ -188,15 +193,12 @@ Status Softmax::ComputeImpl(const Tensor& input, Tensor& output, size_t axis,
   return Status::OK();
 }
 
-ONNX_OPERATOR_VERSIONED_KERNEL_EX(Softmax, kOnnxDomain, 1, 13, kXnnpackExecutionProvider,
+ONNX_OPERATOR_VERSIONED_KERNEL_EX(Softmax, kOnnxDomain, 1, 12, kXnnpackExecutionProvider,
                                   KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
                                   Softmax);
-ONNX_OPERATOR_VERSIONED_KERNEL_EX(QLinearSoftmax, kMSDomain, 1, 13, kXnnpackExecutionProvider,
+ONNX_OPERATOR_VERSIONED_KERNEL_EX(QLinearSoftmax, kMSDomain, 1, 12, kXnnpackExecutionProvider,
                                   KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<uint8_t>()),
                                   Softmax);
-// ONNX_OPERATOR_KERNEL_EX(Softmax, kOnnxDomain, 12, kXnnpackExecutionProvider,
-//                         KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
-//                         Softmax);
 
 }  // namespace xnnpack
 }  // namespace onnxruntime

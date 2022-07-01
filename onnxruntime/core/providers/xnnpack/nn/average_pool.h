@@ -17,7 +17,7 @@ namespace xnnpack {
 
 class AveragePool : public OpKernel {
  public:
-  AveragePool(const OpKernelInfo& info);
+  explicit AveragePool(const OpKernelInfo& info);
 
   Status Compute(OpKernelContext* context) const override;
   static bool IsAveragePoolOnnxNodeSupported(const NodeUnit& nodeunit, const GraphViewer& graph);

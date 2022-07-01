@@ -585,7 +585,7 @@ Wwhere the function `Sigmoid(x) = 1 / (1 + exp(-x))` )DOC";
           "Constrain input and output types to 8 bit tensors.")
       .TypeAndShapeInferenceFunction(ONNX_NAMESPACE::propagateShapeAndTypeFromFirstInput));
 
-ONNX_MS_OPERATOR_SET_SCHEMA(QLinearSoftmax, 1,
+  ONNX_MS_OPERATOR_SET_SCHEMA(QLinearSoftmax, 1,
                               OpSchema()
                                   .SetDoc(R"DOC(
 QLinearSoftmax computes the normalized exponential values for the given input:
@@ -602,10 +602,16 @@ and contains the QLinearSoftmax values of the corresponding input.
                                          "T")
                                   .Input(1, "x_scale", "Scale of quantized input 'X'. It must be a scalar.",
                                          "tensor(float)")
-                                  .Input(2, "x_zero_point", "Zero point tensor for input 'X'. It must be a scalar.", "T")
+                                  .Input(2, "x_zero_point",
+                                         "Zero point tensor for input 'X'."
+                                         "It must be a scalar.",
+                                         "T")
                                   .Input(3, "y_scale", "Scale of quantized output 'Y'. It must be a scalar.",
                                          "tensor(float)")
-                                  .Input(4, "y_zero_point", "Zero point tensor for output 'Y'. It must be a scalar.", "T")
+                                  .Input(4, "y_zero_point",
+                                         "Zero point tensor for output 'Y'. "
+                                         "It must be a scalar.",
+                                         "T")
                                   .Output(0, "Y",
                                           "Output data tensor from pooling across the input "
                                           "tensor. The output tensor has the same rank as the input. "
