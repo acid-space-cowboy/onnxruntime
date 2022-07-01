@@ -43,11 +43,21 @@ namespace Dml
 
         void AdvanceAllocator(GpuEvent completionEvent)
         {
+            size_t nextAllocator = (m_currentCommandAllocator + 1) % AllocatorCount;
+
+            // Only switch allocators when the other allocator is ready to be reset.  Otherwise,
+            // an allocator could end up never being reset depending on the recording pattern and timing.
+            if (m_commandAllocators[nextAllocator].completionEvent.IsSignaled())
+            {
+                CommandAllocatorInfo& allocatorInfo = m_commandAllocators[nextAllocator];
+                ORT_THROW_IF_FAILED(allocatorInfo.Get()->Reset());
+
+                // Advance to the next allocator.
+                m_currentCommandAllocator = nextAllocator;
+            }
+
             // Set the completion event for the current allocator so it can be reset eventually.
             m_commandAllocators[m_currentCommandAllocator].completionEvent = completionEvent;
-
-            // Advance to the next allocator.
-            m_currentCommandAllocator = (m_currentCommandAllocator + 1) % AllocatorCount;
         }
 
     private:
