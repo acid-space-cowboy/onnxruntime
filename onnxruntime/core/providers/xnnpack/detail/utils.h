@@ -103,6 +103,10 @@ bool IsQuantizedAvgPool(QuantizedOpType quant_op_type);
 bool IsQuantizedSoftmax(QuantizedOpType quant_op_type);
 xnn_datatype GetDtypeInXnnpack(const onnxruntime::NodeUnit& node_unit, int32_t io_index,
                                bool is_output, const onnxruntime::GraphViewer& graph_viewer);
+const onnx::TensorProto* GetQuantizationScale(const InitializedTensorSet& initializers,
+                                              const NodeUnitIODef& io_def);
 
+const onnx::TensorProto* GetQuantizationZeroPoint(const InitializedTensorSet& initializers,
+                                                  const NodeUnitIODef& io_def);
 }  // namespace xnnpack
 }  // namespace onnxruntime

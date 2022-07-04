@@ -112,7 +112,7 @@ std::unique_ptr<IndexedSubGraph::MetaDef> FuseQDQGroup(const NodeUnit& unit_node
   } else if (qtype == QuantizedOpType::QDQAvgPool || qtype == QuantizedOpType::QDQSoftmax) {
     // registration
     def.domain = kMSDomain;  // should always be kMSDomain
-    def.since_version = 1;   // onnx schema version
+    def.since_version = 1;   // nhwc schema start version
     // x xsc xzp ysc yzp
     def.inputs.reserve(5);
     // x x-scale x-zp
@@ -246,8 +246,8 @@ bool IsQuantizedSoftmax(QuantizedOpType quant_op_type) {
   return (quant_op_type == QuantizedOpType::QDQSoftmax);
 }
 
-static const onnx::TensorProto* GetQuantizationScale(const InitializedTensorSet& initializers,
-                                                     const NodeUnitIODef& io_def) {
+const onnx::TensorProto* GetQuantizationScale(const InitializedTensorSet& initializers,
+                                              const NodeUnitIODef& io_def) {
   if (io_def.quant_param.has_value() == false) {
     return nullptr;
   }
@@ -260,8 +260,8 @@ static const onnx::TensorProto* GetQuantizationScale(const InitializedTensorSet&
   return it->second;
 }
 
-static const onnx::TensorProto* GetQuantizationZeroPoint(const InitializedTensorSet& initializers,
-                                                         const NodeUnitIODef& io_def) {
+const onnx::TensorProto* GetQuantizationZeroPoint(const InitializedTensorSet& initializers,
+                                                  const NodeUnitIODef& io_def) {
   if (!io_def.quant_param.has_value() || !io_def.quant_param->zero_point)
     return nullptr;
 
@@ -273,7 +273,7 @@ static const onnx::TensorProto* GetQuantizationZeroPoint(const InitializedTensor
   return initializers.at(zero_point_name);
 }
 
-// Xnnpack predefined a few dtypes for quantized tensor, hence we can easily check if xnnpack support it
+// XNNPACK defined a few dtypes for quantized tensor, hence we can easily check if XNNPACK support it
 xnn_datatype GetDtypeInXnnpack(const onnxruntime::NodeUnit& node_unit, int32_t io_index,
                                bool is_output, const onnxruntime::GraphViewer& graph_viewer) {
   // we do not check the legality of io_index here
@@ -291,12 +291,13 @@ xnn_datatype GetDtypeInXnnpack(const onnxruntime::NodeUnit& node_unit, int32_t i
   int64_t zero_dim = !zero_tensor ? 0 : (zero_tensor->dims().empty() ? 1 : zero_tensor->dims()[0]);
   const auto& quantization_params = iodef.quant_param.value();
   Shape tensor_shape;
-  if (!GetShape(iodef.node_arg, tensor_shape)){
+  if (!GetShape(iodef.node_arg, tensor_shape)) {
     return datatype;
   }
 
   std::vector<uint8_t> unpacked_tensor;
   // we have process float-type in the beginning
+  // we do not handle u8s8
   switch (input_type) {
     case ONNX_NAMESPACE::TensorProto_DataType_UINT8:
       if (quantization_params.zero_point == nullptr) {
@@ -313,37 +314,32 @@ xnn_datatype GetDtypeInXnnpack(const onnxruntime::NodeUnit& node_unit, int32_t i
       datatype = xnn_datatype_quint8;
       break;
     case ONNX_NAMESPACE::TensorProto_DataType_INT8:
-      if (!iodef.quant_param.has_value() || scale_tensor == nullptr ||
-          scale_tensor->data_type() != ONNX_NAMESPACE::TensorProto_DataType_INT8 ||
-          zero_tensor == nullptr || zero_tensor->data_type() != ONNX_NAMESPACE::TensorProto_DataType_INT8) {
+      // symmetry conv? when zero_dim == 0
+      if (scales_dim != zero_dim && zero_dim != 0) {
+        LOGS_DEFAULT(VERBOSE) << "mismatching number of scale " << scales_dim
+                              << " and zero-point " << zero_dim << " quantization parameters for INT8";
         break;
       }
 
-      if (quantization_params.zero_point == nullptr) {
-        LOGS_DEFAULT(VERBOSE) << "missing zero point quantization parameters for int8 tensor";
-        break;
-      }
-      if (scales_dim != zero_dim) {
-        LOGS_DEFAULT(VERBOSE) << "mismatching number of scale " << scales_dim
-                              << " and zeropoint" << zero_dim << " quantization parameters for INT8 ";
-        break;
-      }
       if (scales_dim == 1) {
         datatype = xnn_datatype_qint8;
         // layout keeps NCHW, check channel dim
       } else if (scales_dim == tensor_shape[1]) {
-        auto status = onnxruntime::utils::UnpackInitializerData(*zero_tensor, node_unit.ModelPath(), unpacked_tensor);
-        if (!status.IsOK()) {
-          LOGS_DEFAULT(ERROR) << "error when unpack zero tensor: "
-                              << ", error msg: " << status.ErrorMessage();
-          break;
-        }
-        const int8_t* zero_points = reinterpret_cast<const int8_t*>(unpacked_tensor.data());
-        for (size_t i = 0; i < unpacked_tensor.size(); i++) {
-          if (zero_points[i] != 0) {
-            LOGS_DEFAULT(VERBOSE) << "only support 0 as zero point, "
-                                  << "zero_points[" << i << "] has value: " << zero_points[i];
+        // default 0 for zero-point if zero_dim == 0
+        if (zero_tensor != nullptr) {
+          auto status = onnxruntime::utils::UnpackInitializerData(*zero_tensor, node_unit.ModelPath(), unpacked_tensor);
+          if (!status.IsOK()) {
+            LOGS_DEFAULT(ERROR) << "error when unpack zero tensor: "
+                                << ", error msg: " << status.ErrorMessage();
             break;
+          }
+          const int8_t* zero_points = reinterpret_cast<const int8_t*>(unpacked_tensor.data());
+          for (size_t i = 0; i < unpacked_tensor.size(); i++) {
+            if (zero_points[i] != 0) {
+              LOGS_DEFAULT(VERBOSE) << "only support 0 as zero point, "
+                                    << "zero_points[" << i << "] has value: " << zero_points[i];
+              break;
+            }
           }
         }
         datatype = xnn_datatype_qcint8;

@@ -53,16 +53,17 @@ bool Softmax::IsSoftmaxOnnxNodeSupported(const onnxruntime::NodeUnit& nodeunit, 
     onnxruntime::ProtoHelperNodeContext nc(node);
     onnxruntime::OpNodeProtoHelper info(&nc);
 
-    // since version 13, softmax support any dimensions to be reduced
-    if (node.SinceVersion() > 12) {
-      // axis could be any dim, but we want it to be the last one right now.
-      // otherwise, just leave it to CPU_EP
-      int64_t axis = 0;
-      info.GetAttrOrDefault<int64_t>("axis", &axis, -1);
-      if (axis != -1 && axis != x_shape->dim_size() - 1) {
-        break;
-      }
+    // axis could be any dim, but we want it to be the last one right now.
+    // otherwise, just leave it to CPU_EP
+    int64_t axis = 1;
+    info.GetAttrOrDefault<int64_t>("axis", &axis, -1);
+    if (node.SinceVersion() <= 12 && axis == -1) {
+      axis = 1;  // default 1 for op-version less than 12
     }
+    if (axis != -1 && axis != x_shape->dim_size() - 1) {
+      break;
+    }
+
     supported = true;
   } while (false);
 
@@ -75,7 +76,10 @@ Softmax::Softmax(const OpKernelInfo& info) : OpKernel{info} {
 
   int64_t axis;
   Status status = info.GetAttr<int64_t>("axis", &axis);
-
+  // our op checker function has ensured that axis must be the last dim
+  // The "semantic" meaning of axis has changed in opset-13.
+  // Please compare: https://github.com/onnx/onnx/blob/master/docs/Operators.md#Softmax
+  // with https://github.com/onnx/onnx/blob/master/docs/Changelog.md#Softmax-11 for detailed explanations
   if (status.IsOK()) {
     axis_ = gsl::narrow_cast<int>(axis);
   } else {
@@ -85,8 +89,17 @@ Softmax::Softmax(const OpKernelInfo& info) : OpKernel{info} {
       axis_ = -1;  // opset-13, the default axis value is -1
     }
   }
+
   // we have check it in GetCapability
   auto input_defs = node.InputDefs();
+  const auto& x_shape = input_defs[0]->Shape();
+  if (x_shape->dim_size() == 0) {
+    return;
+  }
+  if (axis_ < 0) {
+    axis_ = static_cast<int>(HandleNegativeAxis(axis_, x_shape->dim_size()));
+  }
+
   int kernel_dtype = 0;
   ORT_ENFORCE(GetType(*input_defs[0], kernel_dtype));
   if (kernel_dtype == ONNX_NAMESPACE::TensorProto_DataType_FLOAT) {
@@ -94,39 +107,13 @@ Softmax::Softmax(const OpKernelInfo& info) : OpKernel{info} {
   } else if (kernel_dtype == ONNX_NAMESPACE::TensorProto_DataType_UINT8) {
     op_type_ = OpComputeType::op_compute_type_qu8;
   }
-  const auto& x_shape = input_defs[0]->Shape();
-  if (axis_ == -1) {
-    axis_ = x_shape->dim_size() - 1;
-  }
+
   uint32_t channels = gsl::narrow_cast<uint32_t>(x_shape->dim(axis_).dim_value());
   xnn_status xstatus;
   struct xnn_operator* p;
   if (op_type_ == OpComputeType::op_compute_type_qu8) {
     InputTensorOrder tensor_index = {-1, 1, 2, -1, -1, -1, 3, 4, -1};
     ParseQuantParamFromInfoByOrder(info, tensor_index, quant_param_);
-
-    /*
-    const Tensor* X_zero_point = nullptr;
-    const Tensor* Y_zero_point = nullptr;
-    const Tensor* X_scale = nullptr;
-    const Tensor* Y_scale = nullptr;
-    info.TryGetConstantInput(InputTensors::IN_X_SCALE, &X_scale);
-    info.TryGetConstantInput(InputTensors::IN_X_ZERO_POINT, &X_zero_point);
-    info.TryGetConstantInput(InputTensors::IN_Y_SCALE, &Y_scale);
-    info.TryGetConstantInput(InputTensors::IN_Y_ZERO_POINT, &Y_zero_point);
-
-    quant_param_.X_zero_point_value = *(X_zero_point->template Data<uint8_t>());
-    quant_param_.X_scale_value = *(X_scale->template Data<float>());
-    quant_param_.Y_zero_point_value = *(Y_zero_point->template Data<uint8_t>());
-    quant_param_.Y_scale_value = *(Y_scale->template Data<float>());
-    */
-
-    /*
-    IsScalarOr1ElementVector(X_scale);
-    X_zero_point == nullptr || IsScalarOr1ElementVector(X_zero_point);
-    IsScalarOr1ElementVector(Y_scale);
-    Y_zero_point == nullptr || IsScalarOr1ElementVector(Y_zero_point);
-    */
     xstatus = xnn_create_softmax_nc_qu8(
         channels,
         channels,
@@ -162,6 +149,7 @@ Status Softmax::Compute(OpKernelContext* ctx) const {
   }
 
   const size_t N = X_shape.SizeToDimension(axis_);
+  //const size_t D = X_shape.SizeFromDimension(axis_); // the step D is 1
   xnn_status status = xnn_status_invalid_state;
   if (op_type_ == OpComputeType::op_compute_type_qu8) {
     status = xnn_setup_softmax_nc_qu8(
@@ -179,10 +167,7 @@ Status Softmax::Compute(OpKernelContext* ctx) const {
         nullptr);
   }
   ORT_ENFORCE(status == xnn_status_success, "xnn_setup_softmax_nc_type failed. Status:", status);
-  status = xnn_run_operator(op0_.get(), nullptr);
-  if (status != xnn_status_success) {
-    return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "xnn_run_operator returned ", status);
-  }
+  ORT_ENFORCE(xnn_run_operator(op0_.get(), nullptr) == xnn_status_success, "xnn_run_operator returned ", status);
   return Status::OK();
 }
 

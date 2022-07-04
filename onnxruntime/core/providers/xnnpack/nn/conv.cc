@@ -155,31 +155,6 @@ Status CreateXnnpackKernel(const ConvAttributes& conv_attrs,
 OpComputeType ParseQuantParamAndConType(const OpKernelInfo& info, QuantParam& quant_param_, int32_t x_dtype) {
   InputTensorOrder tensor_index = {0, 1, 2, 3, 4, 5, 6, 7, 8};
   ParseQuantParamFromInfoByOrder(info, tensor_index, quant_param_);
-  /*
-  // quant param, which used in create xnnpack_conv_kernel
-  const onnxruntime::Tensor* X_zero_point = nullptr;
-  const onnxruntime::Tensor* W_zero_point = nullptr;
-  const onnxruntime::Tensor* Y_zero_point = nullptr;
-  // we do not check the error here, as we have done it in op_checker
-  info.TryGetConstantInput(Conv::InputTensors::IN_X_ZERO_POINT, &X_zero_point);
-  info.TryGetConstantInput(Conv::InputTensors::IN_W_ZERO_POINT, &W_zero_point);
-  info.TryGetConstantInput(Conv::InputTensors::IN_Y_ZERO_POINT, &Y_zero_point);
-
-  quant_param_.X_zero_point_value = *(X_zero_point->template Data<uint8_t>());
-  quant_param_.W_zero_point_value = *(W_zero_point->template Data<uint8_t>());
-  quant_param_.Y_zero_point_value = *(Y_zero_point->template Data<uint8_t>());
-
-  const onnxruntime::Tensor* X_scale = nullptr;
-  const onnxruntime::Tensor* W_scale = nullptr;
-  const onnxruntime::Tensor* Y_scale = nullptr;
-  info.TryGetConstantInput(Conv::InputTensors::IN_X_SCALE, &X_scale);
-  info.TryGetConstantInput(Conv::InputTensors::IN_W_SCALE, &W_scale);
-  info.TryGetConstantInput(Conv::InputTensors::IN_Y_SCALE, &Y_scale);
-
-  quant_param_.X_scale_value = *(X_scale->template Data<float>());
-  quant_param_.W_scale_value = *(W_scale->template Data<float>());
-  quant_param_.Y_scale_value = *(Y_scale->template Data<float>());
-*/
   OpComputeType conv_type = OpComputeType::op_compute_type_invalid;
   if (x_dtype == ONNX_NAMESPACE::TensorProto_DataType_INT8) {
     if (quant_param_.W_scale_tensor) {
@@ -201,27 +176,41 @@ xnn_datatype TryGetBiasDtypeInXnnpack(const onnxruntime::NodeUnit& node_unit,
   const NodeUnitIODef& iodef = node_unit.Inputs()[2];
   xnn_datatype datatype = xnn_datatype_invalid;
   int32_t input_type = 0;
-  if (!GetType(iodef.node_arg, input_type)) {
+  if (!GetType(iodef.node_arg, input_type) || input_type != ONNX_NAMESPACE::TensorProto_DataType_INT32) {
     return datatype;
   }
-  if (iodef.quant_param.has_value() == false && input_type == ONNX_NAMESPACE::TensorProto_DataType_INT32) {
-    std::vector<uint8_t> unpacked_tensor;
-    const onnx::TensorProto* bias_value = nullptr;
-    if (graph_viewer.GetInitializedTensor(iodef.node_arg.Name(), bias_value)) {
-      if (onnxruntime::utils::UnpackInitializerData(
-              *bias_value, node_unit.ModelPath(), unpacked_tensor)
-              .IsOK()) {
-        const auto& W_shape = node_unit.Inputs()[1].node_arg.Shape();
-        // conv weight must have dim_value;
-        size_t CO = W_shape->dim(0).dim_value();
-        if (unpacked_tensor.size() / sizeof(int32_t) == CO) {
-          return xnn_datatype_qint32;
-        } else {
-          return xnn_datatype_qcint32;
-        }
+  // check channels of bias
+  std::vector<uint8_t> unpacked_tensor;
+  const onnx::TensorProto* bias_value = nullptr;
+  if (graph_viewer.GetInitializedTensor(iodef.node_arg.Name(), bias_value)) {
+    if (onnxruntime::utils::UnpackInitializerData(
+            *bias_value, node_unit.ModelPath(), unpacked_tensor)
+            .IsOK()) {
+      const auto& W_shape = node_unit.Inputs()[1].node_arg.Shape();
+      // conv weight must have dim_value;
+      size_t CO = W_shape->dim(0).dim_value();
+      if (unpacked_tensor.size() / sizeof(int32_t) == CO) {
+        return xnn_datatype_qint32;
+      } else {
+        return xnn_datatype_qcint32;
       }
     }
   }
+  /*
+  // Does the quant_param have any impact here?
+  else if (iodef.quant_param.has_value()) {
+    const auto *scale = GetQuantizationScale(graph_viewer.GetAllInitializedTensors(), iodef);
+    const auto *zero_point = GetQuantizationZeroPoint(graph_viewer.GetAllInitializedTensors(), iodef);
+    if (scale != nullptr && onnxruntime::utils::UnpackInitializerData(
+                                *scale, node_unit.ModelPath(), unpacked_tensor)
+                                .IsOK()) {
+      if (zero_point != nullptr && onnxruntime::utils::UnpackInitializerData(
+                                       *zero_point, node_unit.ModelPath(), unpacked_tensor)
+                                       .IsOK()) {
+      }
+
+      }
+  }*/
 
   return datatype;
 }
@@ -271,7 +260,8 @@ static bool ValidateXnnpackConvtype(
       break;
     case xnn_datatype_qcint8:
       if (input_datatype == xnn_datatype_qint8 &&
-          (!bias_datatype || *bias_datatype == xnn_datatype_qcint32) &&
+          // what the bias should be for per-channel quantization
+          // (!bias_datatype || *bias_datatype == xnn_datatype_qcint32) &&
           output_datatype == xnn_datatype_qint8) {
         return true;
       }

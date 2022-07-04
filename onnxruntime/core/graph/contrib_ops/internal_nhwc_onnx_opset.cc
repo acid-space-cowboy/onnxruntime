@@ -16,7 +16,7 @@ using RegistrationFunc = std::function<void(ONNX_NAMESPACE::OpSchema&&)>;
 
 namespace {
 
-template <typename F>
+//template <typename F>
 void RegisterNHWCSchema(const RegistrationFunc& f, ::ONNX_NAMESPACE::OpSchema&& schema) {
   // Need to copy the inferencing function from the temporary OpSchema object
   auto onnx_inferencing_func = schema.GetTypeAndShapeInferenceFunction();
@@ -66,8 +66,8 @@ void OpSet_Internal_NHWC_ONNX::ForEachSchema(const std::function<void(ONNX_NAMES
   REGISTER_NHWC_SCHEMA_WITH_ACTIVATION(fn, Conv, 11);
   REGISTER_NHWC_SCHEMA_WITH_ACTIVATION(fn, MaxPool, 11);
   REGISTER_NHWC_SCHEMA_WITH_ACTIVATION(fn, MaxPool, 12);
-  REGISTER_NHWC_SCHEMA_WITH_ACTIVATION(fn, AveragePool, 7);
-  REGISTER_NHWC_SCHEMA_WITH_ACTIVATION(fn, QLinearConv, 10);
+  REGISTER_NHWC_SCHEMA_WITH_ACTIVATION(fn, AveragePool, 11);
+  REGISTER_NHWC_SCHEMA(fn, QLinearConv, 10);
 
   // TODO: Add other layout sensitive ops when needed. Those are:
   //   QLinearConv,

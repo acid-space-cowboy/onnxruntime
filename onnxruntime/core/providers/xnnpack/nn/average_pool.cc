@@ -182,27 +182,6 @@ AveragePool::AveragePool(const OpKernelInfo& info)
   } else if (input_dtype == ONNX_NAMESPACE::TensorProto_DataType_UINT8) {
     InputTensorOrder tensor_index = {0, 1, 2, -1, -1, -1, 3, 4, -1};
     ParseQuantParamFromInfoByOrder(info, tensor_index, quant_param_);
-    /*
-    const Tensor* X_zero_point = nullptr;
-    const Tensor* Y_zero_point = nullptr;
-    const Tensor* X_scale = nullptr;
-    const Tensor* Y_scale = nullptr;
-    // we have check it in op_checker already
-    info.TryGetConstantInput(InputTensors::IN_X_SCALE, &X_scale);
-    info.TryGetConstantInput(InputTensors::IN_X_ZERO_POINT, &X_zero_point);
-    info.TryGetConstantInput(InputTensors::IN_Y_SCALE, &Y_scale);
-    info.TryGetConstantInput(InputTensors::IN_Y_ZERO_POINT, &Y_zero_point);
-
-    // IsScalarOr1ElementVector(X_scale),
-    // X_zero_point == nullptr || IsScalarOr1ElementVector(X_zero_point),
-    // IsScalarOr1ElementVector(Y_scale),
-    // Y_zero_point == nullptr || IsScalarOr1ElementVector(Y_zero_point),
-
-    quant_param_.X_zero_point_value = *(X_zero_point->template Data<uint8_t>());
-    quant_param_.X_scale_value = *(X_scale->template Data<float>());
-    quant_param_.Y_zero_point_value = *(Y_zero_point->template Data<uint8_t>());
-    quant_param_.Y_scale_value = *(Y_scale->template Data<float>());
-    */
     avgpool_type_ = OpComputeType::op_compute_type_qu8;
   }
   struct xnn_operator* p;
@@ -253,7 +232,7 @@ Status AveragePool::Compute(OpKernelContext* context) const {
   return Status::OK();
 }
 
-ONNX_OPERATOR_VERSIONED_KERNEL_EX(AveragePool, kMSInternalNHWCDomain, 7, 7, kXnnpackExecutionProvider,
+ONNX_OPERATOR_VERSIONED_KERNEL_EX(AveragePool, kMSInternalNHWCDomain, 11, 11, kXnnpackExecutionProvider,
                                   KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
                                   AveragePool);
 ONNX_OPERATOR_TYPED_KERNEL_EX(
