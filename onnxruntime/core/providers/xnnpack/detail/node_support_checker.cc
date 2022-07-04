@@ -89,7 +89,7 @@ bool NodeSupportChecker::IsNodeSupported(const NodeUnit& nodeunit) {
       {"QLinearConv", Conv::IsConvOnnxNodeSupported},
       {"MaxPool", MaxPool::IsMaxPoolOnnxNodeSupported},
       {"AveragePool", AveragePool::IsAveragePoolOnnxNodeSupported},
-      {"Softmax", Softmax::IsSoftmaxOnnxNodeSupported},
+      //{"Softmax", Softmax::IsSoftmaxOnnxNodeSupported},
   };
 
   bool supported = false;

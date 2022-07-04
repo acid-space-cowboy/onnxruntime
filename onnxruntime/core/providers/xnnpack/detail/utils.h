@@ -28,15 +28,15 @@ enum OpComputeType : uint8_t {
 };
 
 struct InputTensorOrder {
-  int IN_X = -1;
-  int IN_X_SCALE = -1;
-  int IN_X_ZERO_POINT = -1;
-  int IN_W = -1;
-  int IN_W_SCALE = -1;
-  int IN_W_ZERO_POINT = -1;
-  int IN_Y_SCALE = -1;
-  int IN_Y_ZERO_POINT = -1;
-  int IN_BIAS = -1;
+  int X_IN = -1;
+  int X_SCALE = -1;
+  int X_ZERO_POINT = -1;
+  int W_CONST = -1;
+  int W_SCALE = -1;
+  int W_ZERO_POINT = -1;
+  int Y_SCALE = -1;
+  int Y_ZERO_POINT = -1;
+  int BIAS = -1;
 };
 
 struct QuantParam {

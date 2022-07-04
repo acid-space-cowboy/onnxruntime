@@ -26,13 +26,6 @@ class Softmax final : public OpKernel {
   int axis_;
   OpComputeType op_type_ = OpComputeType::op_compute_type_invalid;
   XnnpackOperator op0_;
-  enum InputTensors : int {
-    IN_X = 0,
-    IN_X_SCALE = 1,
-    IN_X_ZERO_POINT = 2,
-    IN_Y_SCALE = 3,
-    IN_Y_ZERO_POINT = 4,
-  };
   QuantParam quant_param_;
 };
 }  // namespace xnnpack

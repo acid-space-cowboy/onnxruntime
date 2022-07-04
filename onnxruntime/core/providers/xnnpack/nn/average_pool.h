@@ -28,13 +28,6 @@ class AveragePool : public OpKernel {
 
   XnnpackOperator op0_;
   std::optional<std::pair<float, float>> clip_min_max_;
-  enum InputTensors : int {
-    IN_X = 0,
-    IN_X_SCALE = 1,
-    IN_X_ZERO_POINT = 2,
-    IN_Y_SCALE = 3,
-    IN_Y_ZERO_POINT = 4,
-  };
   QuantParam quant_param_;
   OpComputeType avgpool_type_ = OpComputeType::op_compute_type_invalid;
 };

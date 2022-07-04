@@ -89,7 +89,7 @@ std::unique_ptr<IndexedSubGraph::MetaDef> FuseQDQGroup(const NodeUnit& unit_node
   if (qtype == QuantizedOpType::QDQConv) {
     // registration
     def.domain = kMSInternalNHWCDomain;  // should always be kMSInternalNHWCDomain
-    def.since_version = 10;              // onnx schema version
+    def.since_version = unit_node.GetNode().SinceVersion();
     def.inputs.reserve(9);
 
     // x x-scale x-zp w w-scale w-zp
@@ -128,12 +128,14 @@ std::unique_ptr<IndexedSubGraph::MetaDef> FuseQDQGroup(const NodeUnit& unit_node
     const auto& y_quant_param = unit_node.Outputs()[0].quant_param.value();
     def.inputs.push_back(y_quant_param.scale.Name());
     def.inputs.push_back(y_quant_param.zero_point ? y_quant_param.zero_point->Name() : "");
-    // we used the nhwc schema here, and avgpool is layout sensitive
+    // we used the NHWC schema here, and avgpool is layout sensitive
     if (qtype == QuantizedOpType::QDQAvgPool) {
       def.attributes["channels_last"] = utils::MakeAttribute(std::string("channels_last"), int64_t(1));
     }
+  } else if (qtype == QuantizedOpType::QDQMaxPool) {
+    // QDQMaxPool, do nothing, QDQMaxPool doesn't require dq node or q node.
   } else {
-    // QlinearMaxPool, do nothing, QlinearMaxPool doesn't require dq node or q node.
+    // all qdq-types are enumerated
   }
   // outputs
   for (const auto& out : unit_node.Outputs()) {
@@ -328,7 +330,7 @@ xnn_datatype GetDtypeInXnnpack(const onnxruntime::NodeUnit& node_unit, int32_t i
       }
       if (scales_dim == 1) {
         datatype = xnn_datatype_qint8;
-        // layout keeps nchw, check channel dim
+        // layout keeps NCHW, check channel dim
       } else if (scales_dim == tensor_shape[1]) {
         auto status = onnxruntime::utils::UnpackInitializerData(*zero_tensor, node_unit.ModelPath(), unpacked_tensor);
         if (!status.IsOK()) {
@@ -366,49 +368,49 @@ bool ParseQuantParamFromInfoByOrder(const OpKernelInfo& info,
   // quant param, which used in create xnnpack_conv_kernel
   // we do not check the error here, as we have done it in op_checker
   // if this input tensor is not exists, its value is -1;
-  if (scale_zp_indexs.IN_X_ZERO_POINT >= 0) {
+  if (scale_zp_indexs.X_ZERO_POINT >= 0) {
     const onnxruntime::Tensor* X_zero_point = nullptr;
-    info.TryGetConstantInput(scale_zp_indexs.IN_X_ZERO_POINT, &X_zero_point);
+    info.TryGetConstantInput(scale_zp_indexs.X_ZERO_POINT, &X_zero_point);
     if (X_zero_point == nullptr) {
       quant_param_.X_zero_point_value = 0;
     } else {
       quant_param_.X_zero_point_value = *(X_zero_point->template Data<uint8_t>());
     }
   }
-  if (scale_zp_indexs.IN_W_ZERO_POINT >= 0) {
+  if (scale_zp_indexs.W_ZERO_POINT >= 0) {
     const onnxruntime::Tensor* W_zero_point = nullptr;
-    info.TryGetConstantInput(scale_zp_indexs.IN_W_ZERO_POINT, &W_zero_point);
+    info.TryGetConstantInput(scale_zp_indexs.W_ZERO_POINT, &W_zero_point);
     if (W_zero_point == nullptr) {
       quant_param_.W_zero_point_value = 0;
     } else {
       quant_param_.W_zero_point_value = *(W_zero_point->template Data<uint8_t>());
     }
   }
-  if (scale_zp_indexs.IN_Y_ZERO_POINT >= 0) {
+  if (scale_zp_indexs.Y_ZERO_POINT >= 0) {
     const onnxruntime::Tensor* Y_zero_point = nullptr;
-    info.TryGetConstantInput(scale_zp_indexs.IN_Y_ZERO_POINT, &Y_zero_point);
+    info.TryGetConstantInput(scale_zp_indexs.Y_ZERO_POINT, &Y_zero_point);
     if (Y_zero_point == nullptr) {
       quant_param_.Y_zero_point_value = 0;
     } else {
       quant_param_.Y_zero_point_value = *(Y_zero_point->template Data<uint8_t>());
     }
   }
-  if (scale_zp_indexs.IN_X_SCALE >= 0) {
+  if (scale_zp_indexs.X_SCALE >= 0) {
     const onnxruntime::Tensor* X_scale = nullptr;
-    info.TryGetConstantInput(scale_zp_indexs.IN_X_SCALE, &X_scale);
+    info.TryGetConstantInput(scale_zp_indexs.X_SCALE, &X_scale);
     quant_param_.X_scale_value = *(X_scale->template Data<float>());
   }
-  if (scale_zp_indexs.IN_W_SCALE >= 0) {
+  if (scale_zp_indexs.W_SCALE >= 0) {
     const onnxruntime::Tensor* W_scale = nullptr;
-    info.TryGetConstantInput(scale_zp_indexs.IN_W_SCALE, &W_scale);
+    info.TryGetConstantInput(scale_zp_indexs.W_SCALE, &W_scale);
     quant_param_.W_scale_value = *(W_scale->template Data<float>());
     if (!IsScalarOr1ElementVector(W_scale)) {
       quant_param_.W_scale_tensor = W_scale;
     }
   }
-  if (scale_zp_indexs.IN_Y_SCALE >= 0) {
+  if (scale_zp_indexs.Y_SCALE >= 0) {
     const onnxruntime::Tensor* Y_scale = nullptr;
-    info.TryGetConstantInput(scale_zp_indexs.IN_Y_SCALE, &Y_scale);
+    info.TryGetConstantInput(scale_zp_indexs.Y_SCALE, &Y_scale);
     quant_param_.Y_scale_value = *(Y_scale->template Data<float>());
   }
   return true;
