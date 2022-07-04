@@ -16,7 +16,7 @@ using RegistrationFunc = std::function<void(ONNX_NAMESPACE::OpSchema&&)>;
 
 namespace {
 
-//template <typename F>
+// template <typename F>
 void RegisterNHWCSchema(const RegistrationFunc& f, ::ONNX_NAMESPACE::OpSchema&& schema) {
   // Need to copy the inferencing function from the temporary OpSchema object
   auto onnx_inferencing_func = schema.GetTypeAndShapeInferenceFunction();

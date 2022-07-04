@@ -7,8 +7,6 @@
 #include "core/providers/cpu/math/softmax_shared.h"
 #include "core/providers/xnnpack/detail/utils.h"
 
-#include <xnnpack.h>
-
 namespace onnxruntime {
 namespace xnnpack {
 
@@ -149,7 +147,7 @@ Status Softmax::Compute(OpKernelContext* ctx) const {
   }
 
   const size_t N = X_shape.SizeToDimension(axis_);
-  //const size_t D = X_shape.SizeFromDimension(axis_); // the step D is 1
+  // const size_t D = X_shape.SizeFromDimension(axis_); // the step D is 1
   xnn_status status = xnn_status_invalid_state;
   if (op_type_ == OpComputeType::op_compute_type_qu8) {
     status = xnn_setup_softmax_nc_qu8(
@@ -171,10 +169,10 @@ Status Softmax::Compute(OpKernelContext* ctx) const {
   return Status::OK();
 }
 
-ONNX_OPERATOR_VERSIONED_KERNEL_EX(Softmax, kOnnxDomain, 1, 12, kXnnpackExecutionProvider,
+ONNX_OPERATOR_VERSIONED_KERNEL_EX(Softmax, kOnnxDomain, 1, 13, kXnnpackExecutionProvider,
                                   KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
                                   Softmax);
-ONNX_OPERATOR_VERSIONED_KERNEL_EX(QLinearSoftmax, kMSDomain, 1, 12, kXnnpackExecutionProvider,
+ONNX_OPERATOR_VERSIONED_KERNEL_EX(QLinearSoftmax, kMSDomain, 1, 13, kXnnpackExecutionProvider,
                                   KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<uint8_t>()),
                                   Softmax);
 

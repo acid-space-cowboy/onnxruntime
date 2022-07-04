@@ -6,7 +6,6 @@
 #include "core/framework/op_kernel.h"
 #include "core/framework/allocator.h"
 #include "core/providers/xnnpack/detail/utils.h"
-#include "xnnpack.h"
 
 namespace onnxruntime {
 class GraphViewer;

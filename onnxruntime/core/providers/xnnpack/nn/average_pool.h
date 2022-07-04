@@ -8,7 +8,6 @@
 #include "core/providers/cpu/nn/pool_attributes.h"
 #include "core/providers/utils.h"
 #include "core/providers/xnnpack/detail/utils.h"
-#include "xnnpack.h"
 
 namespace onnxruntime {
 class GraphViewer;

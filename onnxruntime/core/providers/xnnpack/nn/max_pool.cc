@@ -211,7 +211,9 @@ ONNX_OPERATOR_VERSIONED_KERNEL_EX(MaxPool, kMSInternalNHWCDomain, 11, 11, kXnnpa
                                   MaxPool);
 
 ONNX_OPERATOR_KERNEL_EX(MaxPool, kMSInternalNHWCDomain, 12, kXnnpackExecutionProvider,
-                        KernelDefBuilder().TypeConstraint("T", {DataTypeImpl::GetTensorType<float>(),DataTypeImpl::GetTensorType<uint8_t>()}),
+                        KernelDefBuilder()
+                            .TypeConstraint("T", {DataTypeImpl::GetTensorType<float>(),
+                                                  DataTypeImpl::GetTensorType<uint8_t>()}),
                         MaxPool);
 }  // namespace xnnpack
 }  // namespace onnxruntime

@@ -38,6 +38,7 @@ const Node* ClipReluChecker(const Node& node,
                             const GraphViewer& graph,
                             const std::unordered_set<const Node*>& supported_nodes) {
   const Node* fuse_with{nullptr};
+  const static std::unordered_set<std::string> node_to_be_fuse = {"Conv", "MaxPool", "AveragePool"};
 
   do {
     // input 0 must come from a node we support
@@ -50,7 +51,7 @@ const Node* ClipReluChecker(const Node& node,
     const Node& input0 = input0_edge->GetNode();
     if (supported_nodes.count(&input0) == 0 ||
         input0.Domain() != kMSInternalNHWCDomain ||
-        (input0.OpType() != "Conv" && input0.OpType() != "MaxPool")) {
+        (node_to_be_fuse.count(input0.OpType()) == 0)) {
       break;
     }
 
