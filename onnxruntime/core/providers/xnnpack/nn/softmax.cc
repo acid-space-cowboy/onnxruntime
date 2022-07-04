@@ -161,28 +161,21 @@ Status Softmax::Compute(OpKernelContext* ctx) const {
     return Status::OK();
   }
 
-  concurrency::ThreadPool* thread_pool = ctx->GetOperatorThreadPool();
-  return ComputeImpl(*X, *Y, axis_, thread_pool);
-}
-
-Status Softmax::ComputeImpl(const Tensor& input, Tensor& output, size_t axis,
-                            concurrency::ThreadPool* /*thread_pool*/) const {
-  const auto& X_shape = input.Shape();
-  const size_t N = X_shape.SizeToDimension(axis);
+  const size_t N = X_shape.SizeToDimension(axis_);
   xnn_status status = xnn_status_invalid_state;
   if (op_type_ == OpComputeType::op_compute_type_qu8) {
     status = xnn_setup_softmax_nc_qu8(
         op0_.get(),
         N,
-        input.template Data<uint8_t>(),
-        output.template MutableData<uint8_t>(),
+        X->template Data<uint8_t>(),
+        Y->template MutableData<uint8_t>(),
         nullptr);
   } else {
     status = xnn_setup_softmax_nc_f32(
         op0_.get(),
         N,
-        input.template Data<float>(),
-        output.template MutableData<float>(),
+        X->template Data<float>(),
+        Y->template MutableData<float>(),
         nullptr);
   }
   ORT_ENFORCE(status == xnn_status_success, "xnn_setup_softmax_nc_type failed. Status:", status);

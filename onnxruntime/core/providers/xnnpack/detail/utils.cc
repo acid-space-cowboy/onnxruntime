@@ -280,12 +280,10 @@ xnn_datatype GetDtypeInXnnpack(const onnxruntime::NodeUnit& node_unit, int32_t i
   const NodeUnitIODef& iodef = is_output ? node_unit.Outputs()[io_index] : node_unit.Inputs()[io_index];
   xnn_datatype datatype = xnn_datatype_invalid;
   int32_t input_type = 0;
-  if (!GetType(iodef.node_arg, input_type)) {
+  if (!GetType(iodef.node_arg, input_type) || iodef.quant_param.has_value() == false) {
     return datatype;
   }
-  if (iodef.quant_param.has_value() == false) {
-    return datatype;
-  }
+
   const InitializedTensorSet& initializers = graph_viewer.GetAllInitializedTensors();
   auto* zero_tensor = GetQuantizationZeroPoint(initializers, iodef);
   auto* scale_tensor = GetQuantizationScale(initializers, iodef);
@@ -293,8 +291,10 @@ xnn_datatype GetDtypeInXnnpack(const onnxruntime::NodeUnit& node_unit, int32_t i
   int64_t zero_dim = !zero_tensor ? 0 : (zero_tensor->dims().empty() ? 1 : zero_tensor->dims()[0]);
   const auto& quantization_params = iodef.quant_param.value();
   Shape tensor_shape;
-  if (!GetShape(iodef.node_arg, tensor_shape))
+  if (!GetShape(iodef.node_arg, tensor_shape)){
     return datatype;
+  }
+
   std::vector<uint8_t> unpacked_tensor;
   // we have process float-type in the beginning
   switch (input_type) {

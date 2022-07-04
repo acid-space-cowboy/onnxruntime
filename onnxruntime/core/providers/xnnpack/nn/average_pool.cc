@@ -1,7 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
-#include <string>
-
 #include "core/providers/xnnpack/nn/average_pool.h"
 
 #include "core/common/status.h"
@@ -9,8 +7,6 @@
 #include "core/graph/graph.h"
 #include "core/providers/utils.h"
 #include "core/framework/tensorprotoutils.h"
-
-#include <xnnpack.h>
 
 namespace onnxruntime {
 namespace xnnpack {

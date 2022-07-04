@@ -20,9 +20,6 @@ class Softmax final : public OpKernel {
   static bool IsSoftmaxOnnxNodeSupported(const NodeUnit& nodeunit, const GraphViewer& graph);
 
  private:
-  Status ComputeImpl(const Tensor& input, Tensor& output, size_t axis,
-                     concurrency::ThreadPool* thread_pool) const;
-
   int axis_;
   OpComputeType op_type_ = OpComputeType::op_compute_type_invalid;
   XnnpackOperator op0_;

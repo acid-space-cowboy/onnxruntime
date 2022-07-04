@@ -5,7 +5,6 @@
 
 #include "core/graph/graph.h"
 #include "core/providers/utils.h"
-#include "core/providers/xnnpack/detail/utils.h"
 #include "core/framework/tensorprotoutils.h"
 
 // to sanity check output shape
@@ -25,9 +24,11 @@ bool MaxPool::IsMaxPoolOnnxNodeSupported(const onnxruntime::NodeUnit& nodeunit,
 
     // we only support float and u8 currently
     const auto* x_type = x_arg.TypeAsProto();
+    // input of maxpool could be fp16/fp32/fp64,i8/u8 according to ONNX
     if (x_type == nullptr ||
         (x_type->tensor_type().elem_type() != ONNX_NAMESPACE::TensorProto_DataType_FLOAT) &&
-            x_type->tensor_type().elem_type() != ONNX_NAMESPACE::TensorProto_DataType_UINT8) {
+            !(x_type->tensor_type().elem_type() == ONNX_NAMESPACE::TensorProto_DataType_UINT8 &&
+              node.SinceVersion() >= 12)) {
       break;
     }
 
@@ -204,13 +205,13 @@ Status MaxPool::Compute(OpKernelContext* context) const {
   return Status::OK();
 }
 
+
 ONNX_OPERATOR_VERSIONED_KERNEL_EX(MaxPool, kMSInternalNHWCDomain, 11, 11, kXnnpackExecutionProvider,
                                   KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
                                   MaxPool);
 
 ONNX_OPERATOR_KERNEL_EX(MaxPool, kMSInternalNHWCDomain, 12, kXnnpackExecutionProvider,
-                        KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
+                        KernelDefBuilder().TypeConstraint("T", {DataTypeImpl::GetTensorType<float>(),DataTypeImpl::GetTensorType<uint8_t>()}),
                         MaxPool);
-
 }  // namespace xnnpack
 }  // namespace onnxruntime

@@ -47,6 +47,7 @@ Status CreateXnnpackKernel(const ConvAttributes& conv_attrs,
   p = nullptr;
 
   // with the following IC and OC number, we can cover depthwise and regular conv at the same time
+  // group is either 1 (for regular conv) or C (for depthwise conv), and hence M % group == 0 so M/group is safe
   uint32_t group_count = gsl::narrow<uint32_t>(conv_attrs.group);
   size_t group_input_channels = gsl::narrow<size_t>(C / group_count);
   size_t group_output_channels = gsl::narrow<size_t>(M / group_count);
