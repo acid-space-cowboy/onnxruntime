@@ -132,6 +132,10 @@ bool AveragePool::IsAveragePoolOnnxNodeSupported(const onnxruntime::NodeUnit& no
       // XNNPack doesn't support 1x1 average pool.
       break;
     }
+    if (pool_attrs.count_include_pad) {
+      break;
+    }
+
     // Average-pool has no multi-outputs definition in ONNX
     supported = true;
   } while (false);
