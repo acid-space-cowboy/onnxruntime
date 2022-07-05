@@ -110,6 +110,7 @@ Softmax::Softmax(const OpKernelInfo& info) : OpKernel{info} {
   xnn_status xstatus;
   struct xnn_operator* p;
   if (op_type_ == OpComputeType::op_compute_type_qu8) {
+    // the order of input tensor, x,x_scale, x_zp, y_scale, y_zp
     InputTensorOrder tensor_index = {-1, 1, 2, -1, -1, -1, 3, 4, -1};
     ParseQuantParamFromInfoByOrder(info, tensor_index, quant_param_);
     xstatus = xnn_create_softmax_nc_qu8(
@@ -172,7 +173,7 @@ Status Softmax::Compute(OpKernelContext* ctx) const {
 ONNX_OPERATOR_VERSIONED_KERNEL_EX(Softmax, kOnnxDomain, 1, 13, kXnnpackExecutionProvider,
                                   KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
                                   Softmax);
-ONNX_OPERATOR_VERSIONED_KERNEL_EX(QLinearSoftmax, kMSDomain, 1, 13, kXnnpackExecutionProvider,
+ONNX_OPERATOR_VERSIONED_KERNEL_EX(QLinearSoftmax, kMSInternalNHWCDomain, 1, 13, kXnnpackExecutionProvider,
                                   KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<uint8_t>()),
                                   Softmax);
 

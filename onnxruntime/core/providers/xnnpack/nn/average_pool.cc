@@ -177,13 +177,14 @@ AveragePool::AveragePool(const OpKernelInfo& info)
   // exception of the batch size. Can be removed once we've run more models using xnnpack AveragePool.
   auto inferred_output_shape = utils::GetTensorShapeFromTensorShapeProto(*Node().OutputDefs()[0]->Shape());
   ORT_ENFORCE(inferred_output_shape[1] == output_dims_[1] &&
-                  inferred_output_shape[2] == output_dims_[2] &&
-                  inferred_output_shape[3] == output_dims_[3],
+              inferred_output_shape[2] == output_dims_[2] &&
+              inferred_output_shape[3] == output_dims_[3],
               "Shape mismatch between inferred value and calculated value.");
   const auto& input_dtype = X_arg.TypeAsProto()->tensor_type().elem_type();
   if (input_dtype == ONNX_NAMESPACE::TensorProto_DataType_FLOAT) {
     avgpool_type_ = OpComputeType::op_compute_type_fp32;
   } else if (input_dtype == ONNX_NAMESPACE::TensorProto_DataType_UINT8) {
+    // the order of input tensor, x,x_scale, x_zp, y_scale, y_zp
     InputTensorOrder tensor_index = {0, 1, 2, -1, -1, -1, 3, 4, -1};
     ParseQuantParamFromInfoByOrder(info, tensor_index, quant_param_);
     avgpool_type_ = OpComputeType::op_compute_type_qu8;
@@ -241,7 +242,7 @@ ONNX_OPERATOR_VERSIONED_KERNEL_EX(AveragePool, kMSInternalNHWCDomain, 11, 11, kX
                                   AveragePool);
 ONNX_OPERATOR_TYPED_KERNEL_EX(
     QLinearAveragePool,
-    kMSDomain,
+    kMSInternalNHWCDomain,
     1,
     uint8_t,
     kXnnpackExecutionProvider,

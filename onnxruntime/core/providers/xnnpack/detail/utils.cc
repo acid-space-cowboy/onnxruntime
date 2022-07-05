@@ -111,8 +111,8 @@ std::unique_ptr<IndexedSubGraph::MetaDef> FuseQDQGroup(const NodeUnit& unit_node
     }
   } else if (qtype == QuantizedOpType::QDQAvgPool || qtype == QuantizedOpType::QDQSoftmax) {
     // registration
-    def.domain = kMSDomain;  // should always be kMSDomain
-    def.since_version = 1;   // nhwc schema start version
+    def.domain = kMSInternalNHWCDomain;
+    def.since_version = unit_node.GetNode().SinceVersion();
     // x xsc xzp ysc yzp
     def.inputs.reserve(5);
     // x x-scale x-zp
@@ -128,10 +128,6 @@ std::unique_ptr<IndexedSubGraph::MetaDef> FuseQDQGroup(const NodeUnit& unit_node
     const auto& y_quant_param = unit_node.Outputs()[0].quant_param.value();
     def.inputs.push_back(y_quant_param.scale.Name());
     def.inputs.push_back(y_quant_param.zero_point ? y_quant_param.zero_point->Name() : "");
-    // we used the NHWC schema here, and avgpool is layout sensitive
-    if (qtype == QuantizedOpType::QDQAvgPool) {
-      def.attributes["channels_last"] = utils::MakeAttribute(std::string("channels_last"), int64_t(1));
-    }
   } else if (qtype == QuantizedOpType::QDQMaxPool) {
     // QDQMaxPool, do nothing, QDQMaxPool doesn't require dq node or q node.
   } else {
