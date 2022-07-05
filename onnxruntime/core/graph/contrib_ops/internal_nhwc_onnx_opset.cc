@@ -8,8 +8,7 @@
 #include "core/graph/constants.h"
 #include "core/graph/contrib_ops/nhwc_inference_context.h"
 
-#include "core/graph/contrib_ops/ms_schema.h" //contrib::GetOpSchema
-
+#include "core/graph/contrib_ops/ms_schema.h"  // contrib::GetOpSchema
 
 namespace onnxruntime {
 namespace contrib {
@@ -52,9 +51,9 @@ void RegisterNHWCSchemaWithActivation(const RegistrationFunc& f, ::ONNX_NAMESPAC
 }  // namespace
 
 #define REGISTER_NHWC_SCHEMA_FROM_MSDOMAIN(RegistrationFn, Op, SinceVersion) \
-  RegisterNHWCSchema(                                                  \
-      RegistrationFn,                                                  \
-      contrib::GetOpSchema<                                            \
+  RegisterNHWCSchema(                                                        \
+      RegistrationFn,                                                        \
+      contrib::GetOpSchema<                                                  \
           contrib::ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Microsoft, SinceVersion, Op)>())
 
 #define REGISTER_NHWC_SCHEMA(RegistrationFn, Op, SinceVersion) \

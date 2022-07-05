@@ -14,6 +14,28 @@
 namespace onnxruntime {
 namespace xnnpack {
 
+const char* TensorQtypeToString(enum TensorQuantType type) {
+  switch (type) {
+    case TensorTypeInvalid:
+      return "Invalid";
+    case TensorTypeFp32:
+      return "FP32";
+    case TensorTypeFp16:
+      return "FP16";
+    case TensorTypeInt8:
+      return "QINT8";
+    case TensorTypeUint8:
+      return "QUINT8";
+    case TensorTypeInt32:
+      return "QINT32";
+    case TensorTypeInt8_Per_Channel:
+      return "QCINT8";
+    case TensorTypeInt32_Per_Channel:
+      return "QCINT32";
+  }
+  return NULL;
+}
+
 bool GetType(const NodeArg& node_arg, int32_t& type) {
   type = ONNX_NAMESPACE::TensorProto_DataType_UNDEFINED;
   const auto* type_proto = node_arg.TypeAsProto();
@@ -74,25 +96,26 @@ static std::unordered_map<QuantizedOpType, ONNXOpType> qdq_to_onnx_type_map = {
     {QuantizedOpType::QDQMaxPool, "QLinearMaxPool"},
 };
 
-std::unique_ptr<IndexedSubGraph::MetaDef> FuseQDQGroup(const NodeUnit& unit_node) {
-  QuantizedOpType qtype = GetQuantizedOpType(unit_node);
+std::unique_ptr<IndexedSubGraph::MetaDef> FuseQDQGroup(const NodeUnit& node_unit) {
+  QuantizedOpType qtype = GetQuantizedOpType(node_unit);
   // create a ComputeCapability for QDQ node.
   std::unique_ptr<IndexedSubGraph::MetaDef> metadef = std::make_unique<IndexedSubGraph::MetaDef>();
   IndexedSubGraph::MetaDef& def = *metadef;
-  // It shouldn't happen if this unit_node passed the check function for each op
+  // It shouldn't happen if this node_unit passed the check function for each op
   if (qdq_to_onnx_type_map.count(qtype) == 0) {
     return {};
   }
-  // inputs
-  const auto& inputs = unit_node.Inputs();
-  def.name = qdq_to_onnx_type_map[qtype];
-  if (qtype == QuantizedOpType::QDQConv) {
-    // registration
-    def.domain = kMSInternalNHWCDomain;  // should always be kMSInternalNHWCDomain
-    def.since_version = unit_node.GetNode().SinceVersion();
-    def.inputs.reserve(9);
 
-    // x x-scale x-zp w w-scale w-zp
+  // inputs
+  const auto& inputs = node_unit.Inputs();
+  def.name = qdq_to_onnx_type_map[qtype];
+  // registration
+  def.domain = kMSInternalNHWCDomain;  // should always be kMSInternalNHWCDomain
+  def.since_version = node_unit.GetNode().SinceVersion();
+  // x x-scale x-zp w w-scale w-zp. Some QDQops wouldn't have 9 inputs,
+  // but the 5 more unit extra memory is not too expensive
+  def.inputs.reserve(9);
+  if (qtype == QuantizedOpType::QDQConv) {
     std::for_each(inputs.cbegin(), inputs.cbegin() + 2,
                   [&def](const NodeUnitIODef& arg) {
                     // keep the number of inputs the same by inserting an empty string for a missing optional input
@@ -102,19 +125,15 @@ std::unique_ptr<IndexedSubGraph::MetaDef> FuseQDQGroup(const NodeUnit& unit_node
                     def.inputs.push_back(quant_param.zero_point ? quant_param.zero_point->Name() : "");
                   });
     // y-scale y-zeropoint
-    const auto& y_quant_param = unit_node.Outputs()[0].quant_param.value();
+    const auto& y_quant_param = node_unit.Outputs()[0].quant_param.value();
     def.inputs.push_back(y_quant_param.scale.Name());
     def.inputs.push_back(y_quant_param.zero_point ? y_quant_param.zero_point->Name() : "");
+
     // bias
     if (inputs.size() > 2) {
       def.inputs.push_back(inputs[2].node_arg.Name());
     }
   } else if (qtype == QuantizedOpType::QDQAvgPool || qtype == QuantizedOpType::QDQSoftmax) {
-    // registration
-    def.domain = kMSInternalNHWCDomain;
-    def.since_version = unit_node.GetNode().SinceVersion();
-    // x xsc xzp ysc yzp
-    def.inputs.reserve(5);
     // x x-scale x-zp
     std::for_each(inputs.cbegin(), inputs.cend(),
                   [&def](const NodeUnitIODef& arg) {
@@ -125,22 +144,25 @@ std::unique_ptr<IndexedSubGraph::MetaDef> FuseQDQGroup(const NodeUnit& unit_node
                     def.inputs.push_back(quant_param.zero_point ? quant_param.zero_point->Name() : "");
                   });
     // y-scale y-zeropoint
-    const auto& y_quant_param = unit_node.Outputs()[0].quant_param.value();
+    const auto& y_quant_param = node_unit.Outputs()[0].quant_param.value();
     def.inputs.push_back(y_quant_param.scale.Name());
     def.inputs.push_back(y_quant_param.zero_point ? y_quant_param.zero_point->Name() : "");
   } else if (qtype == QuantizedOpType::QDQMaxPool) {
-    // QDQMaxPool, do nothing, QDQMaxPool doesn't require dq node or q node.
+    // only one input for QDQMaxPool, Tensor:X
+    def.inputs.push_back(inputs[0].node_arg.Name());
   } else {
     // all qdq-types are enumerated
+    ORT_ENFORCE(0, "unkown QDQ ops", def.name);
   }
+
   // outputs
-  for (const auto& out : unit_node.Outputs()) {
+  for (const auto& out : node_unit.Outputs()) {
     def.outputs.push_back(out.node_arg.Name());
   }
 
   // attributes
   // copy existing and add the activation info
-  def.attributes.insert(unit_node.GetNode().GetAttributes().begin(), unit_node.GetNode().GetAttributes().end());
+  def.attributes.insert(node_unit.GetNode().GetAttributes().begin(), node_unit.GetNode().GetAttributes().end());
   return metadef;
 }
 
@@ -247,6 +269,7 @@ const onnx::TensorProto* GetQuantizationScale(const InitializedTensorSet& initia
   if (io_def.quant_param.has_value() == false) {
     return nullptr;
   }
+
   onnx::TensorProto tensor_proto_ret;
   const auto scale_name = io_def.quant_param->scale.Name();
   auto it = initializers.find(scale_name);
@@ -270,11 +293,11 @@ const onnx::TensorProto* GetQuantizationZeroPoint(const InitializedTensorSet& in
 }
 
 // XNNPACK defined a few dtypes for quantized tensor, hence we can easily check if XNNPACK support it
-xnn_datatype GetDtypeInXnnpack(const onnxruntime::NodeUnit& node_unit, int32_t io_index,
-                               bool is_output, const onnxruntime::GraphViewer& graph_viewer) {
+TensorQuantType GetTensorQuantType(const onnxruntime::NodeUnit& node_unit, int32_t io_index,
+                                   bool is_output, const onnxruntime::GraphViewer& graph_viewer) {
   // we do not check the legality of io_index here
   const NodeUnitIODef& iodef = is_output ? node_unit.Outputs()[io_index] : node_unit.Inputs()[io_index];
-  xnn_datatype datatype = xnn_datatype_invalid;
+  TensorQuantType datatype = TensorTypeInvalid;
   int32_t input_type = 0;
   if (!GetType(iodef.node_arg, input_type) || iodef.quant_param.has_value() == false) {
     return datatype;
@@ -283,31 +306,34 @@ xnn_datatype GetDtypeInXnnpack(const onnxruntime::NodeUnit& node_unit, int32_t i
   const InitializedTensorSet& initializers = graph_viewer.GetAllInitializedTensors();
   auto* zero_tensor = GetQuantizationZeroPoint(initializers, iodef);
   auto* scale_tensor = GetQuantizationScale(initializers, iodef);
-  int64_t scales_dim = !scale_tensor ? 0 : (scale_tensor->dims().empty() ? 1 : scale_tensor->dims()[0]);
+
+  if (scale_tensor == nullptr || (zero_tensor && zero_tensor->data_type() != input_type)) {
+    return datatype;
+  }
+
+  int64_t scales_dim = scale_tensor->dims().empty() ? 1 : scale_tensor->dims()[0];
   int64_t zero_dim = !zero_tensor ? 0 : (zero_tensor->dims().empty() ? 1 : zero_tensor->dims()[0]);
   const auto& quantization_params = iodef.quant_param.value();
+
   Shape tensor_shape;
   if (!GetShape(iodef.node_arg, tensor_shape)) {
     return datatype;
   }
 
   std::vector<uint8_t> unpacked_tensor;
-  // we have process float-type in the beginning
+  // we have processed float-type in the beginning
   // we do not handle u8s8
   switch (input_type) {
     case ONNX_NAMESPACE::TensorProto_DataType_UINT8:
-      if (quantization_params.zero_point == nullptr) {
-        LOGS_DEFAULT(VERBOSE) << "missing zero point quantization parameters for "
-                                 "UINT8 tensor";
-        break;
-      }
-      if (scales_dim != 1 || zero_dim != 1) {
+      // zero_point is optional according to https://github.com/onnx/onnx/blob/main/docs/Operators.md#attributes-20
+      if (quantization_params.zero_point && (scales_dim != 1 || zero_dim != 1)) {
         LOGS_DEFAULT(VERBOSE) << "unsupported number " << scales_dim
                               << " of scale quantization parameters for UINT8 tensor"
                                  "per-channel uint8 quantization isn't supported";
         break;
       }
-      datatype = xnn_datatype_quint8;
+
+      datatype = TensorTypeUint8;
       break;
     case ONNX_NAMESPACE::TensorProto_DataType_INT8:
       // symmetry conv? when zero_dim == 0
@@ -318,7 +344,7 @@ xnn_datatype GetDtypeInXnnpack(const onnxruntime::NodeUnit& node_unit, int32_t i
       }
 
       if (scales_dim == 1) {
-        datatype = xnn_datatype_qint8;
+        datatype = TensorTypeInt8;
         // layout keeps NCHW, check channel dim
       } else if (scales_dim == tensor_shape[1]) {
         // default 0 for zero-point if zero_dim == 0
@@ -338,7 +364,8 @@ xnn_datatype GetDtypeInXnnpack(const onnxruntime::NodeUnit& node_unit, int32_t i
             }
           }
         }
-        datatype = xnn_datatype_qcint8;
+
+        datatype = TensorTypeInt8_Per_Channel;
       } else {
         LOGS_DEFAULT(VERBOSE) << "mismatching number of quantization parameters  " << scales_dim
                               << " and outer dimension " << tensor_shape[1];
@@ -363,43 +390,52 @@ bool ParseQuantParamFromInfoByOrder(const OpKernelInfo& info,
   if (scale_zp_indexs.X_ZERO_POINT >= 0) {
     const onnxruntime::Tensor* X_zero_point = nullptr;
     info.TryGetConstantInput(scale_zp_indexs.X_ZERO_POINT, &X_zero_point);
+
     if (X_zero_point == nullptr) {
       quant_param_.X_zero_point_value = 0;
     } else {
       quant_param_.X_zero_point_value = *(X_zero_point->template Data<uint8_t>());
     }
   }
+
   if (scale_zp_indexs.W_ZERO_POINT >= 0) {
     const onnxruntime::Tensor* W_zero_point = nullptr;
     info.TryGetConstantInput(scale_zp_indexs.W_ZERO_POINT, &W_zero_point);
+
     if (W_zero_point == nullptr) {
       quant_param_.W_zero_point_value = 0;
     } else {
       quant_param_.W_zero_point_value = *(W_zero_point->template Data<uint8_t>());
     }
   }
+
   if (scale_zp_indexs.Y_ZERO_POINT >= 0) {
     const onnxruntime::Tensor* Y_zero_point = nullptr;
     info.TryGetConstantInput(scale_zp_indexs.Y_ZERO_POINT, &Y_zero_point);
+
     if (Y_zero_point == nullptr) {
       quant_param_.Y_zero_point_value = 0;
     } else {
       quant_param_.Y_zero_point_value = *(Y_zero_point->template Data<uint8_t>());
     }
   }
+
   if (scale_zp_indexs.X_SCALE >= 0) {
     const onnxruntime::Tensor* X_scale = nullptr;
     info.TryGetConstantInput(scale_zp_indexs.X_SCALE, &X_scale);
     quant_param_.X_scale_value = *(X_scale->template Data<float>());
   }
+
   if (scale_zp_indexs.W_SCALE >= 0) {
     const onnxruntime::Tensor* W_scale = nullptr;
     info.TryGetConstantInput(scale_zp_indexs.W_SCALE, &W_scale);
     quant_param_.W_scale_value = *(W_scale->template Data<float>());
+
     if (!IsScalarOr1ElementVector(W_scale)) {
       quant_param_.W_scale_tensor = W_scale;
     }
   }
+
   if (scale_zp_indexs.Y_SCALE >= 0) {
     const onnxruntime::Tensor* Y_scale = nullptr;
     info.TryGetConstantInput(scale_zp_indexs.Y_SCALE, &Y_scale);

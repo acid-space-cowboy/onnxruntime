@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <unordered_map>
 #include <vector>
 #include <string>
 #include <utility>
@@ -27,6 +28,17 @@ enum OpComputeType : uint8_t {
   op_compute_type_qs8_per_channel,
   op_compute_type_qs8,
   op_compute_type_qu8,
+};
+
+enum TensorQuantType : uint8_t {
+  TensorTypeInvalid = 0,
+  TensorTypeFp32,
+  TensorTypeInt8,
+  TensorTypeUint8,
+  TensorTypeInt8_Per_Channel,
+  TensorTypeInt32,
+  TensorTypeInt32_Per_Channel,
+  TensorTypeFp16,
 };
 
 struct InputTensorOrder {
@@ -101,12 +113,15 @@ bool IsQuantizedMaxPool(QuantizedOpType quant_op_type);
 bool IsQuantizedAvgPool(QuantizedOpType quant_op_type);
 
 bool IsQuantizedSoftmax(QuantizedOpType quant_op_type);
-xnn_datatype GetDtypeInXnnpack(const onnxruntime::NodeUnit& node_unit, int32_t io_index,
-                               bool is_output, const onnxruntime::GraphViewer& graph_viewer);
+TensorQuantType GetTensorQuantType(const onnxruntime::NodeUnit& node_unit, int32_t io_index,
+                                   bool is_output, const onnxruntime::GraphViewer& graph_viewer);
 const onnx::TensorProto* GetQuantizationScale(const InitializedTensorSet& initializers,
                                               const NodeUnitIODef& io_def);
 
 const onnx::TensorProto* GetQuantizationZeroPoint(const InitializedTensorSet& initializers,
                                                   const NodeUnitIODef& io_def);
+
+const char* TensorQtypeToString(enum TensorQuantType type);
+
 }  // namespace xnnpack
 }  // namespace onnxruntime

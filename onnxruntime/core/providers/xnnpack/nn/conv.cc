@@ -10,6 +10,7 @@
 #include "core/providers/xnnpack/detail/utils.h"
 #include "core/framework/tensorprotoutils.h"
 
+
 namespace onnxruntime {
 namespace xnnpack {
 
@@ -20,9 +21,7 @@ Status CreateXnnpackKernel(const ConvAttributes& conv_attrs,
                            const std::optional<std::pair<float, float>>& clip_min_max,
                            const Tensor& W, const Tensor* B_Ts,
                            struct xnn_operator*& p,
-#ifdef XNN_CACHE_ENABLE
                            xnn_caches_t caches_t,
-#endif
                            QuantParam* quant_param,
                            OpComputeType conv_type) {
   uint32_t kernel_height = gsl::narrow<uint32_t>(kernel_shape[0]);
@@ -47,10 +46,14 @@ Status CreateXnnpackKernel(const ConvAttributes& conv_attrs,
   p = nullptr;
 
   // with the following IC and OC number, we can cover depthwise and regular conv at the same time
-  // group is either 1 (for regular conv) or C (for depthwise conv), and hence M % group == 0 so M/group is safe
+  // the equation 'IC (group_input_channels) == C ' set up when group_count==1 (regular convolution)
+  // and OC (group_output_channels) follows the same rule.
+  // also, in the case of DepthWiseConv, group_count = C, IC is 1 constantly, OC is what DPconv require.
+  // So we can unify it with IC and OC.
+  // group is either 1 (for regular conv) or C (for depth-wise conv), and hence M % group == 0 so M/group is safe
   uint32_t group_count = gsl::narrow<uint32_t>(conv_attrs.group);
-  size_t group_input_channels = gsl::narrow<size_t>(C / group_count);
-  size_t group_output_channels = gsl::narrow<size_t>(M / group_count);
+  size_t group_input_channels = gsl::narrow<size_t>(C / group_count);   // either C or 1
+  size_t group_output_channels = gsl::narrow<size_t>(M / group_count);  // either M or M/C
   if (conv_type == OpComputeType::op_compute_type_fp32) {
     float output_min = clip_min_max ? clip_min_max->first : -INFINITY;
     float output_max = clip_min_max ? clip_min_max->second : INFINITY;
@@ -62,12 +65,10 @@ Status CreateXnnpackKernel(const ConvAttributes& conv_attrs,
         dilation_height, dilation_width,
         group_count,
         group_input_channels, group_output_channels,     // groups, group_input_channels, group_output_channels
-        static_cast<size_t>(C), static_cast<size_t>(M),  // input channel stride, output channel stride
+        C, M,  // input channel stride, output channel stride
         W.Data<float>(), B_data,
         output_min, output_max, flags,
-#ifdef XNN_CACHE_ENABLE
         caches_t,
-#endif
         &p);
   } else if (conv_type == OpComputeType::op_compute_type_qs8) {
     int8_t output_min = -126;
@@ -81,16 +82,13 @@ Status CreateXnnpackKernel(const ConvAttributes& conv_attrs,
         group_count,
         group_input_channels,
         group_output_channels,
-        static_cast<size_t>(C),
-        static_cast<size_t>(M),
+        C, M,
         static_cast<int8_t>(quant_param->X_zero_point_value), quant_param->X_scale_value,
         quant_param->W_scale_value, W.Data<int8_t>(), B_data,
         static_cast<int8_t>(quant_param->Y_zero_point_value), quant_param->Y_scale_value,
         output_min, output_max,
-        0,  // flags
-#ifdef XNN_CACHE_ENABLE
+        flags,
         caches_t,
-#endif
         &p);
   } else if (conv_type == OpComputeType::op_compute_type_qs8_per_channel) {
     auto* B_data = B_Ts ? B_Ts->Data<int32_t>() : nullptr;
@@ -104,17 +102,14 @@ Status CreateXnnpackKernel(const ConvAttributes& conv_attrs,
         group_count,
         group_input_channels,
         group_output_channels,
-        static_cast<size_t>(C),
-        static_cast<size_t>(M),
+        C, M,
         static_cast<int8_t>(quant_param->X_zero_point_value), quant_param->X_scale_value,
         quant_param->W_scale_tensor->template Data<float>(),
         W.Data<int8_t>(), B_data,
         quant_param->Y_zero_point_value, quant_param->Y_scale_value,
         output_min, output_max,
-        0,  // flags
-#ifdef XNN_CACHE_ENABLE
+        flags,
         caches_t,
-#endif
         &p);
   } else if (conv_type == OpComputeType::op_compute_type_qu8) {
     auto* B_data = B_Ts ? B_Ts->Data<int32_t>() : nullptr;
@@ -128,17 +123,14 @@ Status CreateXnnpackKernel(const ConvAttributes& conv_attrs,
         group_count,
         group_input_channels,
         group_output_channels,
-        static_cast<size_t>(C),
-        static_cast<size_t>(M),
+        C, M,
         quant_param->X_zero_point_value, quant_param->X_scale_value,
         quant_param->W_zero_point_value, quant_param->W_scale_value,
         W.Data<uint8_t>(), B_data,
         quant_param->Y_zero_point_value, quant_param->Y_scale_value,
         output_min, output_max,
-        0,  // flags
-#ifdef XNN_CACHE_ENABLE
+        flags,
         caches_t,
-#endif
         &p);
   } else {
     return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL,
@@ -168,13 +160,13 @@ OpComputeType ParseQuantParamAndConType(const OpKernelInfo& info, QuantParam& qu
   return conv_type;
 }
 
-// if bias type is int32 and it has no quantparam, the dtype check will be failed GetDtypeInXnnpack
+// if bias type is int32 and it has no quantparam, the dtype check will be failed GetTensorQuantType
 // however, it should be fine.
-xnn_datatype TryGetBiasDtypeInXnnpack(const onnxruntime::NodeUnit& node_unit,
-                                      const onnxruntime::GraphViewer& graph_viewer) {
+TensorQuantType TryGetConvBiasDtype(const onnxruntime::NodeUnit& node_unit,
+                                         const onnxruntime::GraphViewer& graph_viewer) {
   // we are not check the legality of io_index here
   const NodeUnitIODef& iodef = node_unit.Inputs()[2];
-  xnn_datatype datatype = xnn_datatype_invalid;
+  TensorQuantType datatype = TensorTypeInvalid;
   int32_t input_type = 0;
   if (!GetType(iodef.node_arg, input_type) || input_type != ONNX_NAMESPACE::TensorProto_DataType_INT32) {
     return datatype;
@@ -190,9 +182,9 @@ xnn_datatype TryGetBiasDtypeInXnnpack(const onnxruntime::NodeUnit& node_unit,
       // conv weight must have dim_value;
       size_t CO = W_shape->dim(0).dim_value();
       if (unpacked_tensor.size() / sizeof(int32_t) == CO) {
-        return xnn_datatype_qint32;
+        return TensorTypeInt32;
       } else {
-        return xnn_datatype_qcint32;
+        return TensorTypeInt32_Per_Channel;
       }
     }
   }
@@ -215,75 +207,53 @@ xnn_datatype TryGetBiasDtypeInXnnpack(const onnxruntime::NodeUnit& node_unit,
   return datatype;
 }
 
-const char* xnn_datatype_to_string(enum xnn_datatype type) {
-  switch (type) {
-    case xnn_datatype_invalid:
-      return "Invalid";
-    case xnn_datatype_fp32:
-      return "FP32";
-    case xnn_datatype_fp16:
-      return "FP16";
-    case xnn_datatype_qint8:
-      return "QINT8";
-    case xnn_datatype_quint8:
-      return "QUINT8";
-    case xnn_datatype_qint32:
-      return "QINT32";
-    case xnn_datatype_qcint8:
-      return "QCINT8";
-    case xnn_datatype_qcint32:
-      return "QCINT32";
-  }
-  return NULL;
-}
-
-// this function is refereed to Xnnpack_conv
-static bool ValidateXnnpackConvtype(
-    xnn_datatype input_datatype,
-    xnn_datatype filter_datatype,
-    xnn_datatype* bias_datatype,  // could be nullptr
-    xnn_datatype output_datatype) {
+// this function is refereed to Xnnpack_conv, u8s8 is not support
+static OpComputeType GetConvCompType(
+    TensorQuantType input_datatype,
+    TensorQuantType filter_datatype,
+    TensorQuantType* bias_datatype,  // could be nullptr
+    TensorQuantType output_datatype) {
   switch (filter_datatype) {
-    case xnn_datatype_fp32:
-      if (input_datatype == xnn_datatype_fp32 &&
-          (!bias_datatype || *bias_datatype == xnn_datatype_fp32) &&
-          output_datatype == xnn_datatype_fp32) {
-        return true;
+    case TensorTypeFp32:
+      if (input_datatype == TensorTypeFp32 &&
+          (!bias_datatype || *bias_datatype == TensorTypeFp32) &&
+          output_datatype == TensorTypeFp32) {
+        return op_compute_type_fp32;
       }
       break;
-    case xnn_datatype_qint8:
-      if (input_datatype == xnn_datatype_qint8 &&
-          (!bias_datatype || *bias_datatype == xnn_datatype_qint32) &&
-          output_datatype == xnn_datatype_qint8) {
-        return true;
+    case TensorTypeInt8:
+      if (input_datatype == TensorTypeInt8 &&
+          (!bias_datatype || *bias_datatype == TensorTypeInt32) &&
+          output_datatype == TensorTypeInt8) {
+        return op_compute_type_qs8;
       }
       break;
-    case xnn_datatype_qcint8:
-      if (input_datatype == xnn_datatype_qint8 &&
-          // what the bias should be for per-channel quantization
-          // (!bias_datatype || *bias_datatype == xnn_datatype_qcint32) &&
-          output_datatype == xnn_datatype_qint8) {
-        return true;
+    case TensorTypeInt8_Per_Channel:
+      if (input_datatype == TensorTypeInt8 &&
+          // what the bias should be for per-channel quantization?
+          // (!bias_datatype || *bias_datatype == TensorTypeInt32_Per_Channel) &&
+          output_datatype == TensorTypeInt8) {
+        return op_compute_type_qs8_per_channel;
       }
       break;
-    case xnn_datatype_quint8:
-      if (input_datatype == xnn_datatype_quint8 &&
-          (!bias_datatype || *bias_datatype == xnn_datatype_qint32) &&
-          output_datatype == xnn_datatype_quint8) {
-        return true;
+    case TensorTypeUint8:
+      if (input_datatype == TensorTypeUint8 &&
+          (!bias_datatype || *bias_datatype == TensorTypeInt32) &&
+          output_datatype == TensorTypeUint8) {
+        return op_compute_type_qu8;
       }
       break;
     default:
       break;
   }
   LOGS_DEFAULT(VERBOSE) << "unsupported Conv in/out data type:"
-                        << "[input_datatype]=" << xnn_datatype_to_string(input_datatype)
-                        << "[filter_datatype]=" << xnn_datatype_to_string(filter_datatype)
+                        << "[input_datatype]=" << TensorQtypeToString(input_datatype)
+                        << "[filter_datatype]=" << TensorQtypeToString(filter_datatype)
                         << "[bias_datatype]="
-                        << (bias_datatype ? xnn_datatype_to_string(*bias_datatype)
+                        << (bias_datatype ? TensorQtypeToString(*bias_datatype)
                                           : "")
-                        << "[output_datatype]=" << xnn_datatype_to_string(output_datatype);
-  return false;
+                        << "[output_datatype]=" << TensorQtypeToString(output_datatype);
+  return op_compute_type_invalid;
 }
 
 // xnnpack support qc8|qs8|qu8
@@ -298,18 +268,18 @@ static bool ValidateXnnpackConvtype(
 static bool isValidQuantConv(const onnxruntime::NodeUnit& node_unit, const onnxruntime::GraphViewer& graph) {
   bool supported = false;
   do {
-    xnn_datatype x_input_type, w_input_type, bias_input_type, output_type;
-    xnn_datatype* bias_input_type_ptr = nullptr;
+    TensorQuantType x_input_type, w_input_type, bias_input_type, output_type;
+    TensorQuantType* bias_input_type_ptr = nullptr;
     // quant conv has at least two inputs, x_tensor and weight
     const auto& inputs = node_unit.Inputs();
-    x_input_type = GetDtypeInXnnpack(node_unit, 0, false, graph);
-    w_input_type = GetDtypeInXnnpack(node_unit, 1, false, graph);
+    x_input_type = GetTensorQuantType(node_unit, 0, false, graph);
+    w_input_type = GetTensorQuantType(node_unit, 1, false, graph);
     if (inputs.size() > 2) {
-      bias_input_type = TryGetBiasDtypeInXnnpack(node_unit, graph);
+      bias_input_type = TryGetConvBiasDtype(node_unit, graph);
       bias_input_type_ptr = &bias_input_type;
     }
-    output_type = GetDtypeInXnnpack(node_unit, 0, true, graph);
-    if (!ValidateXnnpackConvtype(x_input_type, w_input_type, bias_input_type_ptr, output_type)) {
+    output_type = GetTensorQuantType(node_unit, 0, true, graph);
+    if (op_compute_type_invalid == GetConvCompType(x_input_type, w_input_type, bias_input_type_ptr, output_type)) {
       break;
     }
     supported = true;
@@ -317,21 +287,22 @@ static bool isValidQuantConv(const onnxruntime::NodeUnit& node_unit, const onnxr
   return supported;
 }
 }  // namespace
+
 // helper to check whether an ONNX Conv node is supported by the NHWC version
 // if this returns true, the layout transformer will be run by GraphPartitioner to convert the first input/output to
 // NHWC format, and move the node to the internal NHWC domain.
-bool Conv::IsConvOnnxNodeSupported(const NodeUnit& nodeunit, const GraphViewer& graph) {
+bool Conv::IsConvOnnxNodeSupported(const NodeUnit& node_unit, const GraphViewer& graph) {
   bool supported = false;
-  auto qtype = GetQuantizedOpType(nodeunit);
-  if (IsQuantizedConv(qtype) && isValidQuantConv(nodeunit, graph) == false) {
+  auto qtype = GetQuantizedOpType(node_unit);
+  if (IsQuantizedConv(qtype) && isValidQuantConv(node_unit, graph) == false) {
     return supported;
   }
 
-  const onnxruntime::Node& node = nodeunit.GetNode();
+  const onnxruntime::Node& node = node_unit.GetNode();
   // use do {} while(false) so it's easier to set a breakpoint on the return
   do {
     // Conv has at least 2 inputs.
-    const auto& inputs = nodeunit.Inputs();
+    const auto& inputs = node_unit.Inputs();
     const auto& x_arg = inputs[0].node_arg;
     const auto& weight_arg = inputs[1].node_arg;
 
@@ -357,7 +328,7 @@ bool Conv::IsConvOnnxNodeSupported(const NodeUnit& nodeunit, const GraphViewer& 
     // if there's a bias input it must be constant
     int32_t bias_index = qtype == QuantizedOpType::QLinearConv ? 8 : 2;
     if (inputs.size() == bias_index + 1) {
-      const auto& bias_arg = nodeunit.Inputs()[bias_index].node_arg;
+      const auto& bias_arg = node_unit.Inputs()[bias_index].node_arg;
       if (bias_arg.Exists() && !graph.IsConstantInitializer(bias_arg.Name(), true)) {
         break;
       }
@@ -411,12 +382,15 @@ Conv::Conv(const OpKernelInfo& info) : OpKernel(info), conv_attrs_{info} {
       }
     }
   }
-  // xnnpack cache_code, this new feature is enabled on the latest XNNPACK
+  // xnnpack cache_code, unfortunately these definitions are only available in xnnpack/cache.h,
 #ifdef XNN_CACHE_ENABLE
 #if XNN_PLATFORM_JIT
   xnn_init_code_cache(&code_cache_);
   xnn_caches_.code_cache = &code_cache_;
 #endif
+  // TODO (Jicwen) enable weight-cache and code-cache
+  xnn_init_weights_cache(&weights_cache_);
+  xnn_caches_.weights_cache = &weights_cache_;
 #endif
   const auto& node{Node()};
 
@@ -500,7 +474,9 @@ Status Conv::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr alloc,
     auto ret = CreateXnnpackKernel(conv_attrs_, C_, M_, kernel_shape_, clip_min_max_, *packed_w_,
                                    B_, p,
 #ifdef XNN_CACHE_ENABLE
-                                   0,  //&xnn_caches_,
+                                   &xnn_caches_,
+#else
+                                   0,
 #endif
                                    &quant_param_, conv_type_);
     ORT_RETURN_IF_ERROR(ret);
@@ -579,9 +555,11 @@ ONNX_OPERATOR_TYPED_KERNEL_EX(
     kXnnpackExecutionProvider,
     KernelDefBuilder()
         .TypeConstraint("T1", DataTypeImpl::GetTensorType<uint8_t>())
-        .TypeConstraint("T2", {DataTypeImpl::GetTensorType<uint8_t>(), DataTypeImpl::GetTensorType<int8_t>()})
-        .TypeConstraint("T3", DataTypeImpl::GetTensorType<uint8_t>()),
+        .TypeConstraint("T2", {DataTypeImpl::GetTensorType<uint8_t>()})
+        .TypeConstraint("T3", DataTypeImpl::GetTensorType<uint8_t>())
+        .TypeConstraint("T4", DataTypeImpl::GetTensorType<int32_t>()),
     Conv);
+
 ONNX_OPERATOR_TYPED_KERNEL_EX(
     QLinearConv,
     kMSInternalNHWCDomain,
@@ -591,7 +569,8 @@ ONNX_OPERATOR_TYPED_KERNEL_EX(
     KernelDefBuilder()
         .TypeConstraint("T1", DataTypeImpl::GetTensorType<int8_t>())
         .TypeConstraint("T2", DataTypeImpl::GetTensorType<int8_t>())
-        .TypeConstraint("T3", DataTypeImpl::GetTensorType<int8_t>()),
+        .TypeConstraint("T3", DataTypeImpl::GetTensorType<int8_t>())
+        .TypeConstraint("T4", DataTypeImpl::GetTensorType<int32_t>()),
     Conv);
 }  // namespace xnnpack
 }  // namespace onnxruntime

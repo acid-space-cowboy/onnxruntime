@@ -31,14 +31,19 @@ KernelCreateInfo BuildKernelCreateInfo<void>() {
   BuildKernelCreateInfo<              \
       ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, Start, Op)>
 
-class ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 11, Conv);
-class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 10, uint8_t, QLinearConv);
+#define KERNEL_CREATE_INFO_TYPED(Start, type, Op) \
+  BuildKernelCreateInfo<                        \
+      ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, Start, type, Op)>
 
+class ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 11, Conv);
 class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 11, 11, MaxPool);
 class ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 12, MaxPool);
 class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 11, 11, AveragePool);
-class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 1, uint8_t, QLinearAveragePool);
 class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 1, 13, Softmax);
+
+class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 10, uint8_t, QLinearConv);
+class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 10, int8_t, QLinearConv);
+class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 1, uint8_t, QLinearAveragePool);
 class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 1, 13, QLinearSoftmax);
 
 std::unique_ptr<KernelRegistry> RegisterKernels() {
@@ -47,17 +52,18 @@ std::unique_ptr<KernelRegistry> RegisterKernels() {
   static const BuildKernelCreateInfoFn function_table[] = {
       BuildKernelCreateInfo<void>,  // default entry to avoid the list becoming empty after ops-reducing
       KERNEL_CREATE_INFO(11, Conv),
-      BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider,
-                                                                  kMSInternalNHWCDomain, 10, uint8_t, QLinearConv)>,
       KERNEL_CREATE_INFO_VERSIONED(11, 11, MaxPool),
       KERNEL_CREATE_INFO(12, MaxPool),
       KERNEL_CREATE_INFO_VERSIONED(11, 11, AveragePool),
-      BuildKernelCreateInfo<
-          ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 1, uint8_t, QLinearAveragePool)>,
+      // layout insensitive, use ONNX-domain directly
       BuildKernelCreateInfo<
           ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 1, 13, Softmax)>,
-      BuildKernelCreateInfo<
-          ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 1, 13, QLinearSoftmax)>,
+
+      //  quantization op
+      KERNEL_CREATE_INFO_TYPED(10, uint8_t, QLinearConv),
+      KERNEL_CREATE_INFO_TYPED(10, int8_t, QLinearConv),
+      KERNEL_CREATE_INFO_TYPED(1, uint8_t, QLinearAveragePool),
+      KERNEL_CREATE_INFO_VERSIONED(1, 13, QLinearSoftmax),
   };
 
   for (auto& function_table_entry : function_table) {

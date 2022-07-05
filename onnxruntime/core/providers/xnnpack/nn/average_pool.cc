@@ -31,6 +31,7 @@ Status CreateXnnpackKernel(const PoolAttributes& pool_attrs,
   if (pool_attrs.auto_pad == AutoPadType::SAME_UPPER) {
     flags |= XNN_FLAG_TENSORFLOW_SAME_PADDING;
   }
+
   xnn_status status;
   if (avgpool_type == OpComputeType::op_compute_type_fp32) {
     float output_min = clip_min_max ? clip_min_max->first : -INFINITY;
@@ -58,6 +59,7 @@ Status CreateXnnpackKernel(const PoolAttributes& pool_attrs,
   } else {
     return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "error kernel type input, expected uint8|float");
   }
+
   if (status != xnn_status_success) {
     return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "xnn_create_average_pooling2d_nhwc_ failed. Status:", status);
   }
@@ -67,15 +69,16 @@ Status CreateXnnpackKernel(const PoolAttributes& pool_attrs,
 static bool IsQuantAvgPoolSupported(const NodeUnit& node_unit, const GraphViewer& graph) {
   bool supported = false;
   do {
-    xnn_datatype x_input_type, output_type;
+    TensorQuantType x_input_type, output_type;
     const auto& inputs = node_unit.Inputs();
     if (inputs.size() != 1) {
       break;
     }
-    x_input_type = GetDtypeInXnnpack(node_unit, 0, false, graph);
-    output_type = GetDtypeInXnnpack(node_unit, 0, true, graph);
-    if (x_input_type != xnn_datatype_quint8 ||
-        output_type != xnn_datatype_quint8) {
+
+    x_input_type = GetTensorQuantType(node_unit, 0, false, graph);
+    output_type = GetTensorQuantType(node_unit, 0, true, graph);
+    if (x_input_type != TensorTypeUint8 ||
+        output_type != TensorTypeUint8) {
       break;
     }
     supported = true;
@@ -85,15 +88,15 @@ static bool IsQuantAvgPoolSupported(const NodeUnit& node_unit, const GraphViewer
 }
 }  // namespace
 
-bool AveragePool::IsAveragePoolOnnxNodeSupported(const onnxruntime::NodeUnit& nodeunit,
+bool AveragePool::IsAveragePoolOnnxNodeSupported(const onnxruntime::NodeUnit& node_unit,
                                                  const onnxruntime::GraphViewer& graph) {
   bool supported = false;
-
-  if (IsQuantizedAvgPool(GetQuantizedOpType(nodeunit)) && IsQuantAvgPoolSupported(nodeunit, graph) == false) {
+  // we check quant-conditions first, if this quant-node is not supported, return directly.
+  if (IsQuantizedAvgPool(GetQuantizedOpType(node_unit)) && IsQuantAvgPoolSupported(node_unit, graph) == false) {
     return supported;
   }
-  const onnxruntime::Node& node = nodeunit.GetNode();
-  const auto& inputs = nodeunit.Inputs();
+  // share the common checks here for fp32 and quant-op
+  const auto& inputs = node_unit.Inputs();
   // use do {} while(false) so it's easier to set a breakpoint on the return
   do {
     // AveragePool has 1 input.
@@ -112,9 +115,9 @@ bool AveragePool::IsAveragePoolOnnxNodeSupported(const onnxruntime::NodeUnit& no
       break;
     }
 
-    onnxruntime::ProtoHelperNodeContext nc(node);
+    onnxruntime::ProtoHelperNodeContext nc(node_unit.GetNode());
     onnxruntime::OpNodeProtoHelper info(&nc);
-    onnxruntime::PoolAttributes pool_attrs(info, "AveragePool", node.SinceVersion());
+    onnxruntime::PoolAttributes pool_attrs(info, "AveragePool", node_unit.SinceVersion());
 
     // xnnpack doesn't appear to support using 'ceil' to calculate the output shape
     // https://github.com/google/XNNPACK/blob/3caa8b9de973839afa1e2a1462ff356e6927a66b/src/operators/average-pooling-nhwc.c#L643
@@ -132,6 +135,7 @@ bool AveragePool::IsAveragePoolOnnxNodeSupported(const onnxruntime::NodeUnit& no
       // XNNPack doesn't support 1x1 average pool.
       break;
     }
+
     if (pool_attrs.count_include_pad) {
       break;
     }
@@ -237,17 +241,16 @@ Status AveragePool::Compute(OpKernelContext* context) const {
   return Status::OK();
 }
 
-ONNX_OPERATOR_VERSIONED_KERNEL_EX(AveragePool, kMSInternalNHWCDomain, 11, 11, kXnnpackExecutionProvider,
-                                  KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
-                                  AveragePool);
-ONNX_OPERATOR_TYPED_KERNEL_EX(
-    QLinearAveragePool,
-    kMSInternalNHWCDomain,
-    1,
-    uint8_t,
+ONNX_OPERATOR_VERSIONED_KERNEL_EX(
+    AveragePool, kMSInternalNHWCDomain, 11, 11,
     kXnnpackExecutionProvider,
-    KernelDefBuilder()
-        .TypeConstraint("T", DataTypeImpl::GetTensorType<uint8_t>()),
+    KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
+    AveragePool);
+
+ONNX_OPERATOR_TYPED_KERNEL_EX(
+    QLinearAveragePool, kMSInternalNHWCDomain, 1,
+    uint8_t, kXnnpackExecutionProvider,
+    KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<uint8_t>()),
     AveragePool);
 
 }  // namespace xnnpack

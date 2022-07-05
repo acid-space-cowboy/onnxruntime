@@ -38,7 +38,7 @@ const Node* ClipReluChecker(const Node& node,
                             const GraphViewer& graph,
                             const std::unordered_set<const Node*>& supported_nodes) {
   const Node* fuse_with{nullptr};
-  const static std::unordered_set<std::string> node_to_be_fuse = {"Conv", "MaxPool", "AveragePool"};
+  static const std::unordered_set<std::string> node_to_be_fuse = {"Conv", "MaxPool", "AveragePool"};
 
   do {
     // input 0 must come from a node we support

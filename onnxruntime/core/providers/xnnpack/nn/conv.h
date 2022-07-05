@@ -14,6 +14,13 @@ class GraphViewer;
 class Node;
 namespace xnnpack {
 
+// from xnnpack/cache.h
+//struct xnn_caches {
+//  struct xnn_code_cache* code_cache;
+//  struct xnn_weights_cache* weights_cache;
+//};
+
+
 class Conv : public OpKernel {
  public:
   Conv(const OpKernelInfo& info);
@@ -29,9 +36,6 @@ class Conv : public OpKernel {
   static bool IsConvOnnxNodeSupported(const NodeUnit& nchw_nodeunit, const GraphViewer& graph);
 
  private:
-  // due to other constraints of this kernel the value of group is either 1 or C, so we can infer that if it's not 1
-  // it's a depthwise convolution
-  bool IsDepthwise() const { return conv_attrs_.group != 1; }
 
   ConvAttributes conv_attrs_;
   TensorShapeVector kernel_shape_;
@@ -42,10 +46,13 @@ class Conv : public OpKernel {
   std::optional<std::pair<float, float>> clip_min_max_;
 
   XnnpackOperator op0_ = nullptr;
-  // when xnnpack version has been updated, we can remove the macro
+  // we can't have the definition here because we can't import xnnpack/cache.h
 #ifdef XNN_CACHE_ENABLE
+#if XNN_PLATFORM_JIT
   xnn_code_cache code_cache_;
-  xnn_caches xnn_caches_;
+#endif
+  xnn_caches xnn_caches_ = {0, 0};
+  xnn_weights_cache weights_cache_;
 #endif
   QuantParam quant_param_;
   OpComputeType conv_type_ = OpComputeType::op_compute_type_invalid;

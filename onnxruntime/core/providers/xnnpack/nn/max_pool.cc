@@ -12,10 +12,12 @@
 
 namespace onnxruntime {
 namespace xnnpack {
-bool MaxPool::IsMaxPoolOnnxNodeSupported(const onnxruntime::NodeUnit& nodeunit,
+
+// MaxPool doesn't have any quantization params
+bool MaxPool::IsMaxPoolOnnxNodeSupported(const onnxruntime::NodeUnit& node_unit,
                                          const onnxruntime::GraphViewer& /*graph*/) {
   bool supported = false;
-  const onnxruntime::Node& node = nodeunit.GetNode();
+  const onnxruntime::Node& node = node_unit.GetNode();
   // use do {} while(false) so it's easier to set a breakpoint on the return
   do {
     // MaxPool has 1 input.
@@ -182,6 +184,7 @@ Status MaxPool::Compute(OpKernelContext* context) const {
   if (Y->Shape().Size() == 0) {
     return Status::OK();
   }
+
   xnn_status status = xnn_status_invalid_state;
   if (maxpool_type_ == OpComputeType::op_compute_type_fp32) {
     status = xnn_setup_max_pooling2d_nhwc_f32(op0_.get(), N, H, W,

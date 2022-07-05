@@ -13,16 +13,17 @@ namespace xnnpack {
 bool IsQuantSoftmaxSupported(const onnxruntime::NodeUnit& node_unit, const onnxruntime::GraphViewer& graph) {
   bool supported = false;
   do {
-    xnn_datatype x_input_type, output_type;
+    TensorQuantType x_input_type, output_type;
     const auto& inputs = node_unit.Inputs();
     // only one input for softmax
     if (inputs.size() != 1) {
       break;
     }
-    x_input_type = GetDtypeInXnnpack(node_unit, 0, false, graph);
-    output_type = GetDtypeInXnnpack(node_unit, 0, true, graph);
-    if (x_input_type != xnn_datatype_quint8 ||
-        output_type != xnn_datatype_quint8) {
+
+    x_input_type = GetTensorQuantType(node_unit, 0, false, graph);
+    output_type = GetTensorQuantType(node_unit, 0, true, graph);
+    if (x_input_type != TensorTypeUint8 ||
+        output_type != TensorTypeUint8) {
       break;
     }
     supported = true;
@@ -31,16 +32,15 @@ bool IsQuantSoftmaxSupported(const onnxruntime::NodeUnit& node_unit, const onnxr
   return supported;
 }
 
-bool Softmax::IsSoftmaxOnnxNodeSupported(const onnxruntime::NodeUnit& nodeunit, const onnxruntime::GraphViewer& graph) {
+bool Softmax::IsSoftmaxOnnxNodeSupported(const onnxruntime::NodeUnit& node_unit, const onnxruntime::GraphViewer& graph) {
   bool supported = false;
-  if (IsQuantizedSoftmax(GetQuantizedOpType(nodeunit)) && IsQuantSoftmaxSupported(nodeunit, graph) == false) {
+  if (IsQuantizedSoftmax(GetQuantizedOpType(node_unit)) && IsQuantSoftmaxSupported(node_unit, graph) == false) {
     return supported;
   }
-  const onnxruntime::Node& node = nodeunit.GetNode();
   // use do {} while(false) so it's easier to set a breakpoint on the return
   do {
     // SoftMax has 1 input.
-    const auto& inputs = nodeunit.Inputs();
+    const auto& inputs = node_unit.Inputs();
     const auto& x_arg = inputs[0].node_arg;
 
     const auto* x_shape = x_arg.Shape();
@@ -48,14 +48,14 @@ bool Softmax::IsSoftmaxOnnxNodeSupported(const onnxruntime::NodeUnit& nodeunit, 
     if (!x_shape || !x_shape->dim(x_shape->dim_size() - 1).has_dim_value()) {
       break;
     }
-    onnxruntime::ProtoHelperNodeContext nc(node);
+    onnxruntime::ProtoHelperNodeContext nc(node_unit.GetNode());
     onnxruntime::OpNodeProtoHelper info(&nc);
 
     // axis could be any dim, but we want it to be the last one right now.
     // otherwise, just leave it to CPU_EP
     int64_t axis = 1;
-    info.GetAttrOrDefault<int64_t>("axis", &axis, -1);
-    if (node.SinceVersion() <= 12 && axis == -1) {
+    info.GetAttrOrDefault<int64_t>("axis", &axis, -1);  // Opset 13 has default value -1
+    if (node_unit.SinceVersion() <= 12 && axis == -1) {
       axis = 1;  // default 1 for op-version less than 12
     }
     if (axis != -1 && axis != x_shape->dim_size() - 1) {
