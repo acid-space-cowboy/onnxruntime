@@ -327,7 +327,7 @@ bool Conv::IsConvOnnxNodeSupported(const NodeUnit& node_unit, const GraphViewer&
 
     // if there's a bias input it must be constant
     int32_t bias_index = qtype == QuantizedOpType::QLinearConv ? 8 : 2;
-    if (inputs.size() == bias_index + 1) {
+    if (inputs.size() == size_t(bias_index + 1)) {
       const auto& bias_arg = node_unit.Inputs()[bias_index].node_arg;
       if (bias_arg.Exists() && !graph.IsConstantInitializer(bias_arg.Name(), true)) {
         break;
@@ -555,7 +555,7 @@ ONNX_OPERATOR_TYPED_KERNEL_EX(
     kXnnpackExecutionProvider,
     KernelDefBuilder()
         .TypeConstraint("T1", DataTypeImpl::GetTensorType<uint8_t>())
-        .TypeConstraint("T2", {DataTypeImpl::GetTensorType<uint8_t>()})
+        .TypeConstraint("T2", DataTypeImpl::GetTensorType<uint8_t>())
         .TypeConstraint("T3", DataTypeImpl::GetTensorType<uint8_t>())
         .TypeConstraint("T4", DataTypeImpl::GetTensorType<int32_t>()),
     Conv);

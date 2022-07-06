@@ -28,9 +28,8 @@ bool MaxPool::IsMaxPoolOnnxNodeSupported(const onnxruntime::NodeUnit& node_unit,
     const auto* x_type = x_arg.TypeAsProto();
     // input of maxpool could be fp16/fp32/fp64,i8/u8 according to ONNX
     if (x_type == nullptr ||
-        (x_type->tensor_type().elem_type() != ONNX_NAMESPACE::TensorProto_DataType_FLOAT) &&
-            !(x_type->tensor_type().elem_type() == ONNX_NAMESPACE::TensorProto_DataType_UINT8 &&
-              node.SinceVersion() >= 12)) {
+        (x_type->tensor_type().elem_type() != ONNX_NAMESPACE::TensorProto_DataType_FLOAT &&
+            x_type->tensor_type().elem_type() != ONNX_NAMESPACE::TensorProto_DataType_UINT8)) {
       break;
     }
 
