@@ -10,6 +10,8 @@
 
 namespace py = pybind11;
 
+namespace onnxruntime {
+
 #ifdef NDEBUG
 #define HIP_ASSERT(x) x
 #else
@@ -47,3 +49,5 @@ class DeviceArray {
   ssize_t size_;
   ssize_t itemsize_;
 };
+
+}  // namespace onnxruntime

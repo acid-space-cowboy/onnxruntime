@@ -7,6 +7,8 @@
 #include "operator.h"
 #include "contrib_ops/rocm/bert/fast_gelu_impl_kernel.h"
 
+namespace onnxruntime {
+
 template <typename T, int ThreadsPerBlock, int VecSize>
 void LaunchFastGelu(const T* input, const T* bias, T* output, int input_length, int bias_length) {
   hipLaunchKernelGGL((onnxruntime::contrib::rocm::FastGeluKernelVec<T, ThreadsPerBlock, VecSize>), 
@@ -15,3 +17,5 @@ void LaunchFastGelu(const T* input, const T* bias, T* output, int input_length, 
                   0, 0,
                   input_length, bias_length, input, bias, output);
 }
+
+}  // namespace onnxruntime

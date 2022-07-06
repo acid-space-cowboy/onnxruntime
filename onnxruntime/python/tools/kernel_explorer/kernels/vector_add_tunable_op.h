@@ -13,6 +13,8 @@ using onnxruntime::contrib::rocm::OpParams;
 using onnxruntime::contrib::rocm::Op;
 using onnxruntime::contrib::rocm::TunableOp;
 
+namespace onnxruntime {
+
 template<typename T>
 struct VectorAddParams : OpParams {
   VectorAddParams(const T* x, const T* y, T* z, int n) : x(x), y(y), z(z), n(n) {}
@@ -61,3 +63,5 @@ class VectorAddTunableOp : public TunableOp {
     ADD_OP(512);
   }
 };
+
+}  // namespace onnxruntime

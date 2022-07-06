@@ -7,6 +7,8 @@
 
 namespace py = pybind11;
 
+namespace onnxruntime {
+
 template <typename T, int ThreadsPerBlock, int VecSize>
 class FastGelu: public Operator<T> {
  public:
@@ -59,3 +61,5 @@ void InitFastGelu(py::module m) {
   REGISTER_OP_FOR_ALL_THREADS_PER_BLOCK(FastGelu, float);
   REGISTER_OP_FOR_ALL_THREADS_PER_BLOCK(FastGelu, double);
 }
+
+}  // namespace onnxruntime

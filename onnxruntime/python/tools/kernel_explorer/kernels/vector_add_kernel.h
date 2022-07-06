@@ -6,6 +6,8 @@
 #include "device_array.h"
 #include "operator.h"
 
+namespace onnxruntime {
+
 template <typename T, int VecSize>
 __global__ void VectorAddKernel(const T* __restrict__ x,
                                   const T* __restrict__ y,
@@ -48,3 +50,5 @@ void LaunchVectorAdd(const T* x, const T* y, T* z, int n) {
                   0, 0,
                   x, y, z, n);
 }
+
+}  // namespace onnxruntime
