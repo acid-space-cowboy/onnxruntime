@@ -49,6 +49,7 @@ void LaunchVectorAdd(const T* x, const T* y, T* z, int n) {
                      dim3(ThreadsPerBlock),
                      0, 0,
                      x, y, z, n);
+  HIP_CALL_THROW(hipGetLastError());
 }
 
 }  // namespace onnxruntime

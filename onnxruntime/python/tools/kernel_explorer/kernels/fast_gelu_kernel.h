@@ -16,6 +16,7 @@ void LaunchFastGelu(const T* input, const T* bias, T* output, int input_length, 
                      dim3(ThreadsPerBlock),
                      0, 0,
                      input_length, bias_length, input, bias, output);
+  HIP_CALL_THROW(hipGetLastError());
 }
 
 }  // namespace onnxruntime
