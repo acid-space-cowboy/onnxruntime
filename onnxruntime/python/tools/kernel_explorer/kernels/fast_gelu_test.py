@@ -3,9 +3,22 @@
 # Licensed under the MIT License.
 # --------------------------------------------------------------------------
 
+import os
 import sys
 
-sys.path.append("../build")
+sys.path.append("../../../../../build/Release")
+sys.path.append("../../../../../build/Release/kernel_explorer")
+
+import ctypes
+
+import onnxruntime_pybind11_state
+
+onnxruntime_pybind11_state.get_available_providers()
+
+_onnxruntime_providers_shared = ctypes.CDLL(name="../../../../../build/Release/libonnxruntime_providers_shared.so", mode=ctypes.RTLD_GLOBAL)
+_onnxruntime_pybind11_state = ctypes.CDLL(name="../../../../../build/Release/onnxruntime_pybind11_state.so", mode=ctypes.RTLD_GLOBAL)
+_onnxruntime_providers_rocm = ctypes.CDLL(name="../../../../../build/Release/libonnxruntime_providers_rocm.so", mode=ctypes.RTLD_GLOBAL)
+
 
 import kernel_explorer as ke
 import numpy as np
