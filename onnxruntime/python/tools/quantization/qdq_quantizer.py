@@ -124,8 +124,47 @@ class QDQQuantizer(ONNXQuantizer):
         )
 
         # Register the chosen dynamic subgraph compute quantization parameter function based on symmetric and qtype
-        self.compute_quantization_parameters_function = self.create_dynamic_subgraph_function(
-            self.input_qType, self.is_activation_symmetric
+        # self.compute_quantization_parameters_function = self.create_dynamic_subgraph_function(
+        #     self.input_qType, self.is_activation_symmetric
+        # )
+        # self.model.model.functions.append(self.compute_quantization_parameters_function)
+
+        # Create CQP Node
+        # input_name = "cqp"
+        # cqp_node_name = input_name + "_ComputeQuantizationParameters"
+        # cqp_node = onnx.helper.make_node(
+        #     "ComputeQuantizationParameters",
+        #     [input_name],
+        #     [cqp_node_name + ":0"],
+        #     reduce_min_name,
+        #     keepdims=0,
+        # )
+
+        # Create CQP Node
+        input_name = "cqp"
+        input_scale_name = input_name + "_scale"
+        input_zp_name = input_name + "_zp"
+        inputs = [input_name]
+        compute_quant_param_node = onnx.helper.make_node(
+            "ComputeQuantizationParameters",
+            inputs,
+            [input_scale_name, input_zp_name],
+            input_name + "_ComputeQuantizationParameters",
+            domain="com.microsoft",
+        )
+        # Create function op
+        func_domain = "com.microsoft"
+        func_opset_imports = [onnx.helper.make_opsetid(func_domain, 1)]
+        self.model.model.opset_import.extend(
+            [onnx.helper.make_opsetid(func_domain, 1)]
+        )  # , onnx.helper.make_opsetid(func_domain, 1)])
+        self.compute_quantization_parameters_function = make_function(
+            func_domain,  # TODO: What domain
+            "ComputeQuantizationParams",
+            [input_name],
+            [input_scale_name, input_zp_name],
+            [compute_quant_param_node],
+            func_opset_imports,
         )
         self.model.model.functions.append(self.compute_quantization_parameters_function)
 
@@ -239,11 +278,11 @@ class QDQQuantizer(ONNXQuantizer):
         input_zp_name = input_name + "_zp"
         inputs = [input_name]
         compute_quant_param_node = onnx.helper.make_node(
-            "ComputeQuantizationParameters",
+            "ComputeQuantizationParams",
             inputs,
             [input_scale_name, input_zp_name],
             input_name + "_ComputeQuantizationParameters",
-            domain=self.compute_quantization_parameters_function.domain,
+            domain="com.microsoft",
         )
         return input_scale_name, input_zp_name, [], [], compute_quant_param_node
 
