@@ -32,7 +32,8 @@ var NAVTREE =
       [ "Namespace List", "namespaces.html", "namespaces_dup" ],
       [ "Namespace Members", "namespacemembers.html", [
         [ "All", "namespacemembers.html", null ],
-        [ "Functions", "namespacemembers_func.html", null ]
+        [ "Functions", "namespacemembers_func.html", null ],
+        [ "Typedefs", "namespacemembers_type.html", null ]
       ] ]
     ] ],
     [ "Classes", "annotated.html", [
@@ -53,10 +54,10 @@ var NAVTREE =
 var NAVTREEINDEX =
 [
 "annotated.html",
-"struct_ort_1_1_base.html#a2f4ae170cb8adebc982cb2dea39325c9",
-"struct_ort_1_1_sequence_type_info.html#aa255aec0a6272cafec6dcc7c2f2ed411",
-"struct_ort_api.html#a11e14c4dd35b1390ab8953a2f9fbbb6b",
-"struct_ort_tensor_r_t_provider_options.html#abd1d8ead04c4035da6af7ba489946d33"
+"struct_ort_1_1_b_float16__t.html#a346ce22f7bd22dece2a426c3826b05b4",
+"struct_ort_1_1_run_options.html#a159fd9dcb41fa9d44fa4e1d55af7c1dd",
+"struct_ort_1_1_value_1_1_ort_sparse_values_param.html#a4bd0e42ad665e4fdfe78df3d72bd6707",
+"struct_ort_api.html#aff6ba9aa0a97a614a98bab6caa150977"
 ];
 
 var SYNCONMSG = 'click to disable panel synchronisation';
